@@ -11,7 +11,11 @@
       // Build output. Committed because `skills add` copies files rather than
       // building, but generated — linting it would be linting the bundler.
       "!skills/ledger-memory/cli.js",
-      "!skills/ledger-memory/ui"
+      "!skills/ledger-memory/ui",
+      // The documentation site is a standalone, dependency-free static page
+      // with its own idioms (browser globals, no modules, semicolons). Holding
+      // it to the workspace's TypeScript style would only fight it.
+      "!docs"
     ]
   },
   "formatter": {
