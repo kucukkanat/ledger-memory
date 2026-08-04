@@ -1,0 +1,1109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LEDGER — local memory for a fleet of agents</title>
+<meta name="description" content="LEDGER is a local-first memory store for AI agents, installed as a skill. Claims decay, chunks do not. Strength is computed, never stored. The store proposes conflicts, agents judge them, you resolve them.">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0b0c'/%3E%3Crect x='9' y='9' width='14' height='14' fill='%23c0f24a' transform='rotate(45 16 16)'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./ledger.css">
+</head>
+<body>
+
+<a class="skip" href="#overview">Skip to content</a>
+
+<!-- ───────────────────────────────────────────────────────── instrument bar -->
+<header class="bar" role="banner">
+  <div class="bar__in">
+    <a class="wordmark" href="#top">
+      <span class="wordmark__glyph" aria-hidden="true">▍</span>
+      <span class="wordmark__text">LEDGER</span>
+    </a>
+    <span class="bar__sep" aria-hidden="true"></span>
+    <span class="bar__status">
+      <span class="blip" aria-hidden="true"></span>
+      <span class="mono micro">127.0.0.1:7444</span>
+    </span>
+    <span class="eq" aria-hidden="true"><span></span><span></span><span></span></span>
+
+    <div class="segbar" aria-hidden="true" data-segbar></div>
+
+    <span class="bar__pct mono micro" data-pct>000</span>
+    <a class="bar__gh mono micro" href="https://github.com/kucukkanat/ledger-memory">GITHUB&nbsp;↗</a>
+  </div>
+</header>
+
+<div class="shell" id="top">
+
+  <!-- ─────────────────────────────────────────────────────────── left rail -->
+  <nav class="rail" aria-label="Page sections">
+    <p class="eyebrow rail__head">Index</p>
+    <ol class="rail__list" data-rail role="list">
+      <li><a href="#overview"><i class="tick" aria-hidden="true"><b></b></i><span class="rail__n mono">01</span><span class="rail__t">Overview</span></a></li>
+      <li><a href="#install"><i class="tick" aria-hidden="true"><b></b></i><span class="rail__n mono">02</span><span class="rail__t">Install</span></a></li>
+      <li><a href="#claims"><i class="tick" aria-hidden="true"><b></b></i><span class="rail__n mono">03</span><span class="rail__t">Claims &amp; chunks</span></a></li>
+      <li><a href="#strength"><i class="tick" aria-hidden="true"><b></b></i><span class="rail__n mono">04</span><span class="rail__t">Strength</span></a></li>
+      <li><a href="#conflicts"><i class="tick" aria-hidden="true"><b></b></i><span class="rail__n mono">05</span><span class="rail__t">Conflicts</span></a></li>
+      <li><a href="#verbs"><i class="tick" aria-hidden="true"><b></b></i><span class="rail__n mono">06</span><span class="rail__t">Recall vs search</span></a></li>
+      <li><a href="#cli"><i class="tick" aria-hidden="true"><b></b></i><span class="rail__n mono">07</span><span class="rail__t">CLI</span></a></li>
+      <li><a href="#query"><i class="tick" aria-hidden="true"><b></b></i><span class="rail__n mono">08</span><span class="rail__t">Query language</span></a></li>
+      <li><a href="#screens"><i class="tick" aria-hidden="true"><b></b></i><span class="rail__n mono">09</span><span class="rail__t">The UI</span></a></li>
+      <li><a href="#limits"><i class="tick" aria-hidden="true"><b></b></i><span class="rail__n mono">10</span><span class="rail__t">Limitations</span></a></li>
+    </ol>
+    <div class="rail__foot">
+      <p class="mono micro dim">SQLITE · FTS5 · WAL</p>
+      <p class="mono micro dim">NO NETWORK</p>
+    </div>
+  </nav>
+
+  <main class="main" id="main">
+
+    <!-- ───────────────────────────────────────────────────────────── hero -->
+    <section class="hero" aria-labelledby="hero-h">
+      <div class="hero__canvas">
+        <canvas data-hero width="1200" height="560" aria-hidden="true"></canvas>
+        <div class="hero__scrim" aria-hidden="true"></div>
+        <p class="hero__legend mono micro" aria-hidden="true"><span data-hero-mode>CLUSTERS</span> · <span data-hero-count>0</span> MEMORIES · LIVE LAYOUT</p>
+      </div>
+
+      <div class="hero__copy">
+        <p class="eyebrow">A skill · v0.1.0 · local-first</p>
+        <h1 id="hero-h">Local memory for a fleet of&nbsp;agents,<br>with a human in the loop.</h1>
+        <p class="lede">
+          Install LEDGER once and every agent on the machine gets a bundled CLI it shells out
+          to — <code>recall</code> before it answers, <code>remember</code> when it learns
+          something durable. You get a supervision UI showing exactly what was written.
+          It is one SQLite file on your disk. Nothing leaves the machine: not the memories,
+          not the queries, not even the fonts in the&nbsp;UI.
+        </p>
+
+        <div class="hero__cmd">
+          <div class="cmd" data-copy-wrap>
+            <span class="cmd__sigil mono" aria-hidden="true">$</span>
+            <code class="mono" data-copy-src>npx skills add kucukkanat/ledger-memory</code>
+            <button class="cmd__btn mono" type="button" data-copy aria-label="Copy the install command">COPY</button>
+          </div>
+          <p class="micro dim">Requires <a href="https://bun.sh">Bun</a>. No build step, no dependency to fetch.</p>
+        </div>
+
+        <ul class="hero__stats" role="list">
+          <li><span class="mono stat__n">10</span><span class="micro dim">seeded clusters</span></li>
+          <li><span class="mono stat__n">190<em>d</em></span><span class="micro dim">decay constant</span></li>
+          <li><span class="mono stat__n">0</span><span class="micro dim">network calls</span></li>
+          <li><span class="mono stat__n">2</span><span class="micro dim">read verbs</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────────────────── overview -->
+    <section id="overview" class="sec" data-sec tabindex="-1" aria-labelledby="overview-h">
+      <div class="sec__head reveal">
+        <p class="eyebrow"><span class="mono">01</span> — Overview</p>
+        <h2 id="overview-h">Most agent memory is a bag of strings that only&nbsp;grows.</h2>
+      </div>
+
+      <div class="sec__body">
+        <div class="prose reveal">
+          <p>
+            That works to a few hundred entries. After that, every retrieval returns something
+            technically relevant and mostly stale, nobody can tell which of two contradictory
+            notes is current, and there is no honest way to delete anything because you cannot
+            remember why it was written.
+          </p>
+          <p>
+            LEDGER makes three distinctions that keep a store useful past that point. They are
+            the whole design, and the rest of this page is those three ideas plus the commands
+            that expose them.
+          </p>
+        </div>
+
+        <ol class="ideas reveal" role="list">
+          <li>
+            <p class="mono micro ghost">01</p>
+            <h3><a href="#claims">Claims decay, chunks do&nbsp;not</a></h3>
+            <p class="micro muted">An assertion is reviewed one at a time and loses strength when nothing reads it. A slice of a document is trusted or dropped whole with its source.</p>
+          </li>
+          <li>
+            <p class="mono micro ghost">02</p>
+            <h3><a href="#strength">Strength is computed, never&nbsp;stored</a></h3>
+            <p class="micro muted">There is no strength column. Every read recalculates it from retrieval count, recency and independent corroboration.</p>
+          </li>
+          <li>
+            <p class="mono micro ghost">03</p>
+            <h3><a href="#conflicts">The store proposes, agents judge, you&nbsp;resolve</a></h3>
+            <p class="micro muted">A lexical rule narrows millions of pairs to a handful. An agent that can actually read returns the verdict. Which memory survives stays your call.</p>
+          </li>
+        </ol>
+
+        <div class="who reveal">
+          <p class="eyebrow">Who it is for</p>
+          <div class="who__grid">
+            <p>You run one or more agents on your own machine, across sessions, and you are tired of re-explaining the same facts.</p>
+            <p>You want to <em>see</em> what got remembered — and to drop it when it is wrong — rather than trusting an opaque vector index.</p>
+            <p>You would rather nothing left the machine at all. LEDGER has no server to sign into and no protocol to configure.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────── install -->
+    <section id="install" class="sec" data-sec aria-labelledby="install-h">
+      <div class="sec__head reveal">
+        <p class="eyebrow"><span class="mono">02</span> — Install</p>
+        <h2 id="install-h">One command. Three files. No install&nbsp;step.</h2>
+      </div>
+
+      <div class="sec__body">
+        <div class="split reveal">
+          <div class="block">
+            <p class="block__cap eyebrow">Add the skill</p>
+            <div class="scroll-x" tabindex="0">
+<pre class="code"><code><span class="c-dim"># this project</span>
+npx skills add kucukkanat/ledger-memory
+
+<span class="c-dim"># or for every project</span>
+npx skills add kucukkanat/ledger-memory -g</code></pre>
+            </div>
+            <p class="prose small">
+              That copies <code>skills/ledger-memory/</code> into <code>.claude/skills/</code>
+              (or <code>~/.claude/skills/</code>). It contains three things: <code>SKILL.md</code>,
+              a single bundled <code>cli.js</code>, and the built UI. Nothing is fetched and
+              nothing is compiled — but it does need <a href="https://bun.sh">Bun</a> on the machine,
+              because <code>cli.js</code> runs on Bun and talks to SQLite through it.
+            </p>
+          </div>
+          <aside class="gnote mono micro">
+            <p class="ghost">REQUIRES</p>
+            <p>bun ≥ 1.x</p>
+            <p class="ghost">STORE</p>
+            <p>~/.ledger/ledger.db</p>
+            <p class="ghost">OVERRIDE</p>
+            <p>$LEDGER_DB</p>
+          </aside>
+        </div>
+
+        <div class="split reveal">
+          <div class="block">
+            <p class="block__cap eyebrow">Look at what your agents learned</p>
+            <div class="scroll-x" tabindex="0">
+<pre class="code"><code>bun ~/.claude/skills/ledger-memory/cli.js serve   <span class="c-dim"># http://127.0.0.1:7444</span></code></pre>
+            </div>
+            <div class="scroll-x" tabindex="0">
+<pre class="code out"><code>
+  <span class="c-accent">●</span> <b>LEDGER</b> <span class="c-dim">running</span>   <span class="c-muted">http://127.0.0.1:7444</span>
+  <span class="c-dim">1284 memories · 6 pending review · /Users/you/.ledger/ledger.db</span>
+
+  <span class="c-dim">Bound to loopback. Nothing in this store leaves this machine.</span>
+</code></pre>
+            </div>
+            <p class="prose small">
+              The server is not on the agents' path at all — they open the SQLite file directly
+              through the CLI, so they keep remembering whether or not it is running. It is where
+              <em>you</em> work: reviewing, correcting and resolving all happen through it.
+              Default port <code>7444</code>, default host <code>127.0.0.1</code>.
+            </p>
+          </div>
+          <aside class="gnote mono micro">
+            <p class="ghost">SERVE</p>
+            <p>--port 7444</p>
+            <p>--host 127.0.0.1</p>
+            <p class="ghost">HALT</p>
+            <p>SIGINT / SIGTERM</p>
+          </aside>
+        </div>
+
+        <div class="split reveal">
+          <div class="block">
+            <p class="block__cap eyebrow">What the agent does at session start</p>
+            <div class="scroll-x" tabindex="0">
+<pre class="code"><code>LEDGER=<span class="c-str">"$(find ~/.claude/skills .claude/skills -name cli.js -path '*ledger-memory*' 2>/dev/null | head -1)"</span>
+LEDGER=<span class="c-str">"$(cd "$(dirname "$LEDGER")" &amp;&amp; pwd)/cli.js"</span>
+
+<span class="c-dim"># so the human can see which agent wrote what</span>
+export LEDGER_AGENT=claude</code></pre>
+            </div>
+            <p class="prose small">
+              The second line makes the path absolute, so it survives a <code>cd</code>. Every
+              call afterwards is <code>bun "$LEDGER" &lt;command&gt;</code>. Throughout this page
+              that is shortened to <code>ledger&nbsp;&lt;command&gt;</code> for readability.
+              <code>SKILL.md</code> <em>is</em> the agent-facing interface — it is the file the
+              model reads, and it tells the agent to say so rather than guess if the path comes
+              back empty.
+            </p>
+          </div>
+          <aside class="gnote mono micro">
+            <p class="ghost">IDENTITY</p>
+            <p>$LEDGER_AGENT</p>
+            <p>default "agent"</p>
+            <p class="ghost">NOTE</p>
+            <p>self-declared,<br>not enforced</p>
+          </aside>
+        </div>
+
+        <div class="reveal">
+          <p class="block__cap eyebrow">A session, end to end</p>
+          <div class="term" data-term>
+            <div class="term__bar" aria-hidden="true">
+              <span class="sq"></span><span class="sq"></span><span class="sq"></span>
+              <span class="mono micro dim">bash — ledger</span>
+            </div>
+            <div class="scroll-x" tabindex="0">
+<pre class="term__body"><code><span class="term__line"><span class="c-accent">$</span> <span data-type>ledger recall "invoice terms brightpath"</span><span class="caret" data-caret></span></span>
+<span class="term__out" data-out>2 memories
+m_msdvpyg9lkdujq   84  Brightpath invoices net-45 in the 2026 contract<span class="c-dim">  [money, invoice]</span>
+m_msdvpyi6f2x7zr   51  Brightpath pays late by about nine days<span class="c-dim">  [money, invoice]</span></span></code></pre>
+            </div>
+          </div>
+          <p class="prose small">
+            One command routinely saves an agent from asking you something you have already
+            told it twice. The number is strength on a 0–100 scale — that is
+            <a href="#strength">section 04</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────────── claims -->
+    <section id="claims" class="sec" data-sec aria-labelledby="claims-h">
+      <div class="sec__head reveal">
+        <p class="eyebrow"><span class="mono">03</span> — Idea one</p>
+        <h2 id="claims-h">Claims decay. Chunks do&nbsp;not.</h2>
+      </div>
+
+      <div class="sec__body">
+        <div class="prose reveal">
+          <p>
+            A <strong>claim</strong> is an assertion an agent believes to be true —
+            <em>“Brightpath invoices net-45 in the 2026 contract.”</em> A <strong>chunk</strong>
+            is a slice of an ingested document. They are the same table and almost nothing
+            else about them is the same.
+          </p>
+          <p>
+            The reason is arithmetic. A person can look at forty new claims a week and say yes
+            or no to each. Nobody can review ten thousand chunks, so LEDGER never asks you to:
+            a document is trusted or dropped <em>whole</em>, and its chunks inherit that number
+            verbatim.
+          </p>
+        </div>
+
+        <div class="scroll-x reveal">
+          <table class="tbl tbl--cmp">
+            <caption class="vh">Behavioural differences between claims and chunks</caption>
+            <thead>
+              <tr><th scope="col">Dimension</th><th scope="col">Claim</th><th scope="col">Chunk</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Written by</th><td><code>ledger remember</code></td><td><code>ledger ingest</code></td></tr>
+              <tr><th scope="row">Strength</th><td>computed from use, freshness, corroboration</td><td>its source’s trust, clamped to <span class="mono">0.15–0.97</span></td></tr>
+              <tr><th scope="row">Decays?</th><td class="yes">Yes — τ = 190 days</td><td class="no">No, by design</td></tr>
+              <tr><th scope="row">Review queue</th><td>Born pending</td><td>Born already reviewed — never queued</td></tr>
+              <tr><th scope="row">Individually approved?</th><td>Yes</td><td class="no">Refused: <span class="mono">not-a-claim</span></td></tr>
+              <tr><th scope="row">Can contradict</th><td>Another claim</td><td class="no">Nothing — chunks are never paired</td></tr>
+              <tr><th scope="row">When the source is dropped</th><td>Survives, flagged <span class="mono">orphaned-source</span>, re-queued</td><td>Soft-deleted with the document</td></tr>
+              <tr><th scope="row">Trust changes when…</th><td>it is retrieved, corroborated, or left alone</td><td>you move the source’s trust slider</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="split reveal">
+          <div class="block">
+            <p class="block__cap eyebrow">Ingest a document</p>
+            <div class="scroll-x" tabindex="0">
+<pre class="code"><code>ledger ingest ./ops-handbook-v4.md --cluster proc --trust 0.86
+
+<span class="c-dim"># formats the CLI cannot read are the caller's job</span>
+your-pdf-tool report.pdf | ledger ingest - --cluster reading --trust 0.7</code></pre>
+            </div>
+            <div class="scroll-x" tabindex="0">
+<pre class="code out"><code>ingested s_msdvpz3k7q  38 chunks
+Chunks are searchable now and are never reviewed one by one. If the document
+asserts something worth remembering on its own, `ledger remember` it as a claim
+— that becomes a reviewable memory.</code></pre>
+            </div>
+            <p class="prose small">
+              Eleven extensions are read straight off disk:
+              <code class="mono">md markdown txt text csv tsv json jsonl log yaml yml</code>.
+              Anything else — PDF, docx — fails with a message telling the agent to extract the
+              text itself and pipe it in, which is why <em>any</em> format can be ingested even
+              though only eleven can be read. Documents are split on blank lines and packed
+              toward 900 characters, and a markdown heading always starts a new chunk so a
+              section keeps its title.
+            </p>
+          </div>
+          <aside class="gnote mono micro">
+            <p class="ghost">CHUNK TARGET</p><p>900 chars</p>
+            <p class="ghost">CEILING</p><p>1600 chars (soft)</p>
+            <p class="ghost">TRUST DEFAULT</p><p>0.75</p>
+          </aside>
+        </div>
+
+        <p class="pull reveal">Ingesting a document is not the same as learning from&nbsp;it.</p>
+        <p class="prose reveal small">
+          If a document asserts something worth holding on its own, an agent follows up with
+          <code>remember</code>. That creates a claim, and claims do get reviewed. The
+          distinction is deliberate: retrieval over a handbook is a search problem, but
+          believing what the handbook says is a judgement, and only one of those is safe to
+          automate.
+        </p>
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────────────────── strength -->
+    <section id="strength" class="sec" data-sec aria-labelledby="strength-h">
+      <div class="sec__head reveal">
+        <p class="eyebrow"><span class="mono">04</span> — Idea two</p>
+        <h2 id="strength-h">Strength is computed, never&nbsp;stored.</h2>
+      </div>
+
+      <div class="sec__body">
+        <div class="prose reveal">
+          <p>
+            There is no <code>strength</code> column. It is recomputed on every read, in exactly
+            one place, from the evidence that justifies it. Storing the number would let it drift
+            away from that evidence — and a stale number that looks authoritative is worse than
+            no number.
+          </p>
+        </div>
+
+        <figure class="formula reveal">
+          <div class="scroll-x" tabindex="0">
+            <p class="formula__eq mono">
+              strength <span class="op">=</span> <span class="k">0.17</span>
+              <span class="op">+</span> <span class="k">0.27</span><span class="op">·</span><span class="v">used</span>
+              <span class="op">+</span> <span class="k">0.34</span><span class="op">·</span><span class="v">fresh</span>
+              <span class="op">+</span> <span class="k">0.22</span><span class="op">·</span><span class="v">corroborated</span>
+            </p>
+          </div>
+          <figcaption class="micro dim">The four weights sum to exactly 1.00. Freshness carries the largest one.</figcaption>
+        </figure>
+
+        <div class="factors reveal">
+          <div class="factor">
+            <p class="eyebrow">used</p>
+            <p class="factor__eq mono micro">ln(1 + hits) / ln(301)</p>
+            <p class="micro muted">Log-scaled retrieval count against a 300-read ceiling. The first read moves it 0.12; the hundredth moves it almost nothing. Beyond 300, more retrieval proves nothing new.</p>
+          </div>
+          <div class="factor">
+            <p class="eyebrow">fresh</p>
+            <p class="factor__eq mono micro">exp(−days / 190)</p>
+            <p class="micro muted">Exponential decay on time since last read. At exactly 190 days a memory keeps 1/e — about 37% — of its freshness. This is the only signal that moves on its own.</p>
+          </div>
+          <div class="factor">
+            <p class="eyebrow">corroborated</p>
+            <p class="factor__eq mono micro">(sources + readers − 2) / 3</p>
+            <p class="micro muted">Independent sources plus distinct agents that have read it. The −2 discounts the first of each: written once by one agent from one source corroborates nothing.</p>
+          </div>
+        </div>
+
+        <!-- live decay demo -->
+        <div class="demo reveal" data-demo>
+          <div class="demo__head">
+            <p class="eyebrow">Live · one claim, watched over time</p>
+            <p class="mono micro dim"><span data-demo-state>DECAYING</span> · <span data-demo-rate>14 d/s</span></p>
+          </div>
+
+          <div class="demo__gauge">
+            <div class="demo__num mono" data-demo-score>51</div>
+            <div class="demo__meter" data-demo-meter>
+              <i data-demo-fill style="width:51%"></i>
+              <span class="demo__mark" style="left:40%" aria-hidden="true"></span>
+              <span class="demo__mark" style="left:70%" aria-hidden="true"></span>
+            </div>
+          </div>
+
+          <dl class="demo__read">
+            <div><dt class="mono micro ghost">DAY</dt><dd class="mono" data-demo-day>0</dd></div>
+            <div><dt class="mono micro ghost">HITS</dt><dd class="mono" data-demo-hits>0</dd></div>
+            <div><dt class="mono micro ghost">USED</dt><dd class="mono" data-demo-used>0.000</dd></div>
+            <div><dt class="mono micro ghost">FRESH</dt><dd class="mono" data-demo-fresh>1.000</dd></div>
+            <div><dt class="mono micro ghost">CORROB</dt><dd class="mono" data-demo-corr>0.000</dd></div>
+          </dl>
+
+          <div class="demo__ctl">
+            <button class="btn btn--accent mono" type="button" data-demo-recall>RECALL <span class="btn__k">agent</span></button>
+            <button class="btn mono" type="button" data-demo-search>SEARCH <span class="btn__k">human</span></button>
+            <button class="btn mono" type="button" data-demo-skip>+30 DAYS</button>
+            <button class="btn mono" type="button" data-demo-reset>RESET</button>
+          </div>
+          <p class="demo__msg micro" data-demo-msg role="status">A brand-new claim scores 51. Left alone it falls to 40 in 74.3 days.</p>
+        </div>
+
+        <div class="split reveal">
+          <div class="block">
+            <p class="block__cap eyebrow">The numbers you will actually see</p>
+            <div class="scroll-x" tabindex="0">
+              <table class="tbl">
+                <caption class="vh">Reference strength values</caption>
+                <thead><tr><th scope="col">Situation</th><th scope="col" class="num">strength</th></tr></thead>
+                <tbody>
+                  <tr><th scope="row">Brand-new claim — 0 hits, 1 source, 1 reader</th><td class="num mono">0.51</td></tr>
+                  <tr><th scope="row">The same claim, untouched for 190 days</th><td class="num mono">0.295</td></tr>
+                  <tr><th scope="row">The same claim, untouched for ten years</th><td class="num mono">0.17</td></tr>
+                  <tr><th scope="row">Saturated — ≥300 hits, just read, corroborated</th><td class="num mono">0.99</td></tr>
+                  <tr><th scope="row">Any pinned claim — opts out of decay entirely</th><td class="num mono">0.99</td></tr>
+                  <tr><th scope="row">A chunk, following its source’s trust</th><td class="num mono">0.15–0.97</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="prose small">
+              An unpinned claim lives in <span class="mono">[0.17, 0.99]</span>: the floor is a
+              constant every claim gets for existing, so nothing ever reaches zero and nothing
+              ever reaches certainty. Pinning holds a claim at 0.99 regardless of use.
+            </p>
+          </div>
+          <aside class="gnote mono micro">
+            <p class="ghost">τ</p><p>190 days</p>
+            <p class="ghost">USE CEILING</p><p>300 reads</p>
+            <p class="ghost">CORROB CEILING</p><p>3</p>
+            <p class="ghost">PINNED</p><p>0.99 flat</p>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────── conflicts -->
+    <section id="conflicts" class="sec" data-sec aria-labelledby="conflicts-h">
+      <div class="sec__head reveal">
+        <p class="eyebrow"><span class="mono">05</span> — Idea three</p>
+        <h2 id="conflicts-h">The store proposes. Agents judge. You&nbsp;resolve.</h2>
+      </div>
+
+      <div class="sec__body">
+        <div class="prose reveal">
+          <p>
+            Deciding that <em>“trains under five hours”</em> contradicts <em>“flies anything over
+            three hours”</em> is a judgement about meaning, and a lexical rule that tries to make
+            it will be confidently wrong. But a lexical rule is very good at something else:
+            cheaply narrowing millions of pairs down to a handful worth a second look.
+          </p>
+          <p>So the pipeline has three actors, and the boundaries between them are the point.</p>
+        </div>
+
+        <ol class="pipe reveal" role="list">
+          <li class="pipe__stage">
+            <p class="mono micro ghost">STAGE 01 · THE STORE</p>
+            <h3>Proposes</h3>
+            <p class="micro muted">
+              On every claim write, up to 500 recently-read claims in the same cluster are
+              compared. A pair survives only if it is topically close (Jaccard overlap ≥ 0.18,
+              on whole text <em>or</em> on the first three content words) <em>and</em> something
+              concrete diverges.
+            </p>
+            <ul class="sig" role="list">
+              <li class="mono micro">divergent numbers</li>
+              <li class="mono micro">divergent dates</li>
+              <li class="mono micro">divergent times</li>
+              <li class="mono micro">divergent weekdays</li>
+              <li class="mono micro">divergent months</li>
+              <li class="mono micro">negation on one side</li>
+            </ul>
+            <p class="micro dim">Score = overlap × 0.6 + min(1, signals ÷ 3) × 0.4. Ranking only — never a verdict.</p>
+          </li>
+          <li class="pipe__stage">
+            <p class="mono micro ghost">STAGE 02 · AN AGENT</p>
+            <h3>Judges</h3>
+            <p class="micro muted">
+              An agent — which can actually read — answers one question per pair: <em>can both
+              be true at once?</em> The signals travel with the candidate so it knows where to
+              look. <code>unrelated</code> settles the pair for good; <code>conflict</code>
+              opens one for you.
+            </p>
+            <ul class="sig" role="list">
+              <li class="mono micro">direct contradiction</li>
+              <li class="mono micro">value drift</li>
+              <li class="mono micro">stale schedule</li>
+              <li class="mono micro">stale terms</li>
+              <li class="mono micro">date conflict</li>
+              <li class="mono micro">stale fact</li>
+            </ul>
+            <p class="micro dim"><code>--detector 0–1</code> is the agent’s own confidence, not the lexical score. The two are unrelated numbers.</p>
+          </li>
+          <li class="pipe__stage">
+            <p class="mono micro ghost">STAGE 03 · YOU</p>
+            <h3>Resolves</h3>
+            <p class="micro muted">
+              Choosing which memory survives is never delegated. Five outcomes, in the UI, the
+              terminal TUI, or one command.
+            </p>
+            <ul class="sig sig--wide" role="list">
+              <li class="mono micro"><b>a</b> keep A, retire B</li>
+              <li class="mono micro"><b>b</b> keep B, retire A</li>
+              <li class="mono micro"><b>both</b> related, not contradictory — writes a link</li>
+              <li class="mono micro"><b>merge</b> B’s text onto A, evidence summed</li>
+              <li class="mono micro"><b>dismiss</b> the detector was wrong</li>
+            </ul>
+            <p class="micro dim">Retirement is a soft delete. Nothing is ever destroyed.</p>
+          </li>
+        </ol>
+
+        <div class="split reveal">
+          <div class="block">
+            <p class="block__cap eyebrow">What the agent sees, and what it sends back</p>
+            <div class="scroll-x" tabindex="0">
+<pre class="code out"><code>cc_msdvpyi8r1tj4u  <span class="c-dim">divergent numbers, divergent times, divergent weekdays</span>
+  A  m_msdvpyg9lkdujq  The weekly review runs Friday 16:00
+  B  m_msdvpyi6f2x7zr  The weekly review runs Thursday 09:30
+
+For each pair: can both be true at once?
+  no  → ledger judge &lt;id&gt; --verdict conflict --kind "&lt;kind&gt;" --detector 0.0-1.0
+  yes → ledger judge &lt;id&gt; --verdict unrelated    (settles the pair for good)</code></pre>
+            </div>
+            <div class="scroll-x" tabindex="0">
+<pre class="code"><code>ledger judge cc_msdvpyi8r1tj4u --verdict conflict \
+  --kind <span class="c-str">"stale schedule"</span> --detector 0.9 --note <span class="c-str">"the schedule moved"</span>
+
+<span class="c-dim"># then, later, yours alone</span>
+ledger resolve cf_msdvpz01x8 merge</code></pre>
+            </div>
+            <p class="prose small">
+              When something has changed, the instruction to agents is: <strong>supersede, never
+              overwrite.</strong> Write the new fact as its own memory and let the store notice
+              the contradiction. Editing the old one destroys the evidence that a decision was
+              ever made differently.
+            </p>
+          </div>
+          <aside class="gnote mono micro">
+            <p class="ghost">OVERLAP FLOOR</p><p>0.18</p>
+            <p class="ghost">PEERS SCANNED</p><p>500 / write</p>
+            <p class="ghost">DEFAULT KIND</p><p>direct contradiction</p>
+            <p class="ghost">DEFAULT DETECTOR</p><p>0.8</p>
+          </aside>
+        </div>
+
+        <p class="pull reveal">The CLI has no <code>resolve</code> command in its agent section, deliberately.</p>
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────────────────────── verbs -->
+    <section id="verbs" class="sec" data-sec aria-labelledby="verbs-h">
+      <div class="sec__head reveal">
+        <p class="eyebrow"><span class="mono">06</span> — Two verbs</p>
+        <h2 id="verbs-h">Why <code>recall</code> and <code>search</code> are different&nbsp;commands.</h2>
+      </div>
+
+      <div class="sec__body">
+        <div class="prose reveal">
+          <p>
+            An agent reaching for a memory is evidence that the memory is worth keeping, so
+            <code>recall</code> counts as a retrieval and feeds <code>used</code> and
+            <code>fresh</code>. You scrolling the Browse table is not evidence of anything, so
+            <code>search</code> does not count — and it does not even pass an agent id.
+          </p>
+          <p>
+            If supervising the store fed the strengths being supervised, the numbers would mean
+            nothing. That could have been one command with a <code>--count-read</code> flag.
+            A flag would eventually get passed wrongly, and the failure would be silent and
+            unrecoverable, so it is two verbs.
+          </p>
+        </div>
+
+        <div class="scroll-x reveal">
+          <table class="tbl tbl--cmp">
+            <caption class="vh">recall compared with search</caption>
+            <thead><tr><th scope="col"></th><th scope="col"><code>recall</code></th><th scope="col"><code>search</code></th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Audience</th><td>agents</td><td>you</td></tr>
+              <tr><th scope="row">Counts as a retrieval</th><td class="yes">Yes</td><td class="no">No</td></tr>
+              <tr><th scope="row">Agent id sent to the store</th><td><code>--agent</code> / <code>$LEDGER_AGENT</code></td><td class="no">none at all</td></tr>
+              <tr><th scope="row">Default <code>--limit</code></th><td class="mono">10</td><td class="mono">25</td></tr>
+              <tr><th scope="row">Layout</th><td>one parseable line per hit, full id, untruncated text</td><td>a table: short id, bar, writer, 70-column text, cluster, age</td></tr>
+              <tr><th scope="row">Empty result</th><td class="mono">nothing remembered about that</td><td class="mono">▍ 0 memories  8ms</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="two reveal">
+          <div>
+            <p class="block__cap eyebrow">recall — for the agent</p>
+            <div class="scroll-x" tabindex="0">
+<pre class="code out"><code>2 memories
+m_msdvpyg9lkdujq   84  Brightpath invoices net-45 in the 2026 contract<span class="c-dim">  [money, invoice]</span>
+m_msdvpyi6f2x7zr   51  Brightpath pays late by about nine days<span class="c-dim">  [money, invoice]</span></code></pre>
+            </div>
+          </div>
+          <div>
+            <p class="block__cap eyebrow">search — for you</p>
+            <div class="scroll-x" tabindex="0">
+<pre class="code out"><code>
+<span class="c-accent">▍</span> <b>2 memories</b>  <span class="c-dim">8ms</span>
+  <span class="c-dim">lkdujq</span>  <span class="c-accent">█████</span><span class="c-dim">░</span>  <span class="c-dim"> 84</span>  <span class="c-dim">wren   </span> Brightpath invoices net-45 in the 2026 contract   <span class="c-dim">finances          3d</span>
+  <span class="c-dim">f2x7zr</span>  <span class="c-warn">███</span><span class="c-dim">░░░</span>  <span class="c-dim"> 51</span>  <span class="c-dim">claude </span> Brightpath pays late by about nine days           <span class="c-dim">finances          11d</span>
+</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <p class="prose small reveal">
+          Retrieval is what keeps a memory alive. Memories nothing reads decay and eventually
+          stop surfacing — so recalling is not just how an agent finds things, it is how the
+          store learns what is worth keeping. A memory that is never retrieved is one the store
+          is right to forget.
+        </p>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────────────── cli -->
+    <section id="cli" class="sec" data-sec aria-labelledby="cli-h">
+      <div class="sec__head reveal">
+        <p class="eyebrow"><span class="mono">07</span> — Reference</p>
+        <h2 id="cli-h">One binary, two audiences.</h2>
+      </div>
+
+      <div class="sec__body">
+        <div class="prose reveal">
+          <p>
+            <code>ledger --help</code> groups its own commands the same way this page does.
+            The split is load-bearing rather than cosmetic: everything in the first table can
+            change what the store believes, and everything in the second is supervision.
+          </p>
+        </div>
+
+        <div class="reveal">
+          <p class="block__cap eyebrow">For agents</p>
+          <div class="scroll-x" tabindex="0">
+            <table class="tbl tbl--cli">
+              <caption class="vh">Agent commands</caption>
+              <thead><tr><th scope="col">Command</th><th scope="col">What it does</th><th scope="col">Key flags</th><th scope="col" class="num">Retrieval</th></tr></thead>
+              <tbody>
+                <tr><th scope="row"><code>recall &lt;query&gt;</code></th><td>Search; the agent’s read verb</td><td class="mono micro">--agent --limit 10 --mode --json</td><td class="num yes mono">yes</td></tr>
+                <tr><th scope="row"><code>remember &lt;text&gt;</code></th><td>Write one claim</td><td class="mono micro">--cluster* --tags --note --json</td><td class="num dim mono">—</td></tr>
+                <tr><th scope="row"><code>forget &lt;id…&gt;</code></th><td>Soft-drop memories</td><td class="mono micro">--agent</td><td class="num dim mono">—</td></tr>
+                <tr><th scope="row"><code>link &lt;a&gt; &lt;b&gt;</code></th><td>Record that two memories are related</td><td class="mono micro">--agent</td><td class="num dim mono">—</td></tr>
+                <tr><th scope="row"><code>clusters</code></th><td>The topic taxonomy; <code>clusters add</code> creates one</td><td class="mono micro">--json</td><td class="num dim mono">—</td></tr>
+                <tr><th scope="row"><code>conflicts</code></th><td>Pairs the store wants judged</td><td class="mono micro">--limit 5 --json</td><td class="num dim mono">—</td></tr>
+                <tr><th scope="row"><code>judge &lt;candidate&gt;</code></th><td>Return the verdict on one pair</td><td class="mono micro">--verdict* --kind --detector --note</td><td class="num dim mono">—</td></tr>
+                <tr><th scope="row"><code>ingest &lt;file&gt;</code></th><td>Store a document as searchable chunks</td><td class="mono micro">--cluster* --trust 0.75 --text --json</td><td class="num dim mono">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="micro dim">* required. <code>-</code> as the file reads stdin.</p>
+        </div>
+
+        <div class="reveal">
+          <p class="block__cap eyebrow">For you</p>
+          <div class="scroll-x" tabindex="0">
+            <table class="tbl tbl--cli">
+              <caption class="vh">Human commands</caption>
+              <thead><tr><th scope="col">Command</th><th scope="col">What it does</th><th scope="col">Key flags</th><th scope="col" class="num">Retrieval</th></tr></thead>
+              <tbody>
+                <tr><th scope="row"><code>serve</code></th><td>The supervision UI on loopback</td><td class="mono micro">--port 7444 --host 127.0.0.1</td><td class="num dim mono">no</td></tr>
+                <tr><th scope="row"><code>review</code></th><td>Work the queue in the terminal</td><td class="mono micro">--json → plain queue dump</td><td class="num dim mono">no</td></tr>
+                <tr><th scope="row"><code>search &lt;query&gt;</code></th><td>Search without counting a retrieval</td><td class="mono micro">--limit 25 --mode --json</td><td class="num dim mono">no</td></tr>
+                <tr><th scope="row"><code>resolve &lt;id&gt; &lt;how&gt;</code></th><td><code>a</code> · <code>b</code> · <code>both</code> · <code>merge</code> · <code>dismiss</code></td><td class="mono micro">--db</td><td class="num dim mono">no</td></tr>
+                <tr><th scope="row"><code>sources</code></th><td>Ingested documents and their trust</td><td class="mono micro">--json</td><td class="num dim mono">no</td></tr>
+                <tr><th scope="row"><code>stats</code></th><td>What is in the store</td><td class="mono micro">--json</td><td class="num dim mono">no</td></tr>
+                <tr><th scope="row"><code>export [query]</code></th><td>Matching memories as JSONL</td><td class="mono micro">always JSONL, cap 100 000</td><td class="num dim mono">no</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="split reveal">
+          <div class="block">
+            <p class="block__cap eyebrow">ledger stats</p>
+            <div class="scroll-x" tabindex="0">
+<pre class="code out"><code>
+<span class="c-accent">▍</span> <b>LEDGER</b>  <span class="c-dim">/Users/you/.ledger/ledger.db</span>
+    <b>1284</b>  memories   <span class="c-dim">1102 claims · 182 chunks</span>
+       <b>6</b>  pending review
+       <b>2</b>  open conflicts   <span class="c-dim">3 candidates awaiting an agent</span>
+       <b>4</b>  sources
+       <b>3</b>  agents     <span class="c-dim">87 calls today</span>
+  <span class="c-dim">4.1 MB on disk</span>
+</code></pre>
+            </div>
+          </div>
+          <aside class="gnote mono micro">
+            <p class="ghost">ENV</p>
+            <p>$LEDGER_DB</p>
+            <p>$LEDGER_AGENT</p>
+            <p>$NO_COLOR</p>
+            <p class="ghost">EXIT</p>
+            <p>1 on failure,<br>stderr prefixed ✕</p>
+          </aside>
+        </div>
+
+        <div class="reveal">
+          <p class="block__cap eyebrow">Review, in the terminal or in the browser — the same keys</p>
+          <div class="keys">
+            <div class="keys__lane">
+              <p class="mono micro"><span class="c-accent">CLAIMS</span></p>
+              <ul role="list">
+                <li><kbd>a</kbd> keep</li><li><kbd>e</kbd> edit</li>
+                <li><kbd>d</kbd> drop</li><li><kbd>p</kbd> pin</li>
+              </ul>
+            </div>
+            <div class="keys__lane">
+              <p class="mono micro"><span class="c-warn">CONFLICTS</span></p>
+              <ul role="list">
+                <li><kbd>1</kbd> keep A</li><li><kbd>2</kbd> keep B</li>
+                <li><kbd>b</kbd> keep both</li><li><kbd>m</kbd> merge</li>
+                <li><kbd>n</kbd> not a conflict</li>
+              </ul>
+            </div>
+            <div class="keys__lane">
+              <p class="mono micro dim">NAV</p>
+              <ul role="list">
+                <li><kbd>↑</kbd><kbd>↓</kbd> or <kbd>j</kbd><kbd>k</kbd> move</li>
+                <li><kbd>tab</kbd> switch lane</li>
+                <li><kbd>q</kbd> quit <span class="dim">(terminal only)</span></li>
+              </ul>
+            </div>
+          </div>
+          <p class="micro dim">Muscle memory should transfer between the two surfaces, so it does.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────────── query -->
+    <section id="query" class="sec" data-sec aria-labelledby="query-h">
+      <div class="sec__head reveal">
+        <p class="eyebrow"><span class="mono">08</span> — Query language</p>
+        <h2 id="query-h">Free text plus filters, in one&nbsp;string.</h2>
+      </div>
+
+      <div class="sec__body">
+        <div class="prose reveal">
+          <p>
+            The same grammar drives <code>recall</code>, <code>search</code>, <code>export</code>
+            and the UI search box. A token is a filter only if it starts with a known key and a
+            colon; everything else is free text. Repeating a key <em>widens</em> —
+            <code>agent:wren agent:forge</code> means either agent, which is what someone typing
+            it expects.
+          </p>
+        </div>
+
+        <div class="scroll-x reveal">
+          <table class="tbl tbl--q">
+            <caption class="vh">Filter tokens</caption>
+            <thead><tr><th scope="col">Token</th><th scope="col">Means</th><th scope="col">Example</th></tr></thead>
+            <tbody>
+              <tr><th scope="row" class="mono">agent:</th><td>written or read by that agent</td><td class="mono micro">recall "deploy checklist agent:forge"</td></tr>
+              <tr><th scope="row" class="mono">cluster:</th><td>topic cluster (the id, not the label)</td><td class="mono micro">recall "node cluster:code"</td></tr>
+              <tr><th scope="row" class="mono">tag:</th><td>an applied tag</td><td class="mono micro">search "invoice tag:build tag:release"</td></tr>
+              <tr><th scope="row" class="mono">type:</th><td><code>chat</code> or <code>doc</code> — said, or from a document</td><td class="mono micro">search "handbook type:doc"</td></tr>
+              <tr><th scope="row" class="mono">kind:</th><td><code>claim</code> or <code>chunk</code></td><td class="mono micro">recall "retention policy kind:chunk"</td></tr>
+              <tr><th scope="row" class="mono">strength:</th><td><code>&lt;N</code> or <code>&gt;N</code>, N between 0 and 100</td><td class="mono micro">search "cluster:code strength:&gt;70"</td></tr>
+              <tr><th scope="row" class="mono">asof:</th><td>what the store knew then, dropped memories included</td><td class="mono micro">recall "kestrel asof:2026-01-01"</td></tr>
+              <tr><th scope="row" class="mono">after:</th><td>created after a date or span</td><td class="mono micro">search "brightpath after:30d"</td></tr>
+              <tr><th scope="row" class="mono">before:</th><td>created before a date or span</td><td class="mono micro">search "brightpath before:2026-06-01"</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="micro dim reveal">
+          Spans are <code>30d</code>, <code>2w</code>, <code>6mo</code>, <code>1y</code> — or
+          anything <code>Date.parse</code> accepts. A bad token is reported, not ignored:
+          <span class="mono">✕ Cannot parse "strength:x": expected strength:&lt;N or strength:&gt;N, N between 0 and 100</span>
+        </p>
+
+        <div class="split reveal">
+          <div class="block asof">
+            <p class="block__cap eyebrow">asof: — the interesting one</p>
+            <p class="prose small">
+              Deletes are soft, which is not a storage decision — it is what makes
+              <code>asof:</code> possible. The question <em>“what did we believe on 1 January?”</em>
+              is destroyed by a hard delete, so rows stay, <code>deleted_at</code> is stamped, and
+              every live query filters on it. Even the full-text index entry for a dropped memory
+              is deliberately retained: remove it and a text search for what the fleet believed
+              last January could never reach the memory that question is about.
+            </p>
+            <div class="scroll-x" tabindex="0">
+<pre class="code"><code>ledger forget m_msdvpyg9lkdujq</code></pre>
+            </div>
+            <div class="scroll-x" tabindex="0">
+<pre class="code out"><code>forgot 1 — still answerable by asof: queries</code></pre>
+            </div>
+            <p class="prose small">
+              <strong>What it does not do.</strong> <code>asof:</code> reconstructs
+              <em>visibility</em>, not content. There is no revision history: a memory that
+              existed then but has been edited since comes back with its current text. Strength
+              is computed at <em>now</em>, not at the target date. And a date-only value is
+              parsed as UTC midnight — <code>asof:2026-01-01</code> means the very beginning of
+              that day, so memories written later that day are excluded.
+            </p>
+          </div>
+          <aside class="gnote mono micro">
+            <p class="ghost">SPANS</p>
+            <p>d = 1 day</p>
+            <p>w = 7 days</p>
+            <p>mo = 30.4 days</p>
+            <p>y = 365 days</p>
+            <p class="ghost">NOTE</p>
+            <p>approximations,<br>not calendar months</p>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────────────────── screens -->
+    <section id="screens" class="sec" data-sec aria-labelledby="screens-h">
+      <div class="sec__head reveal">
+        <p class="eyebrow"><span class="mono">09</span> — The UI</p>
+        <h2 id="screens-h">Five screens, on&nbsp;loopback.</h2>
+      </div>
+
+      <div class="sec__body">
+        <div class="prose reveal">
+          <p>
+            <code>ledger serve</code> binds to <code>127.0.0.1:7444</code> and serves a UI whose
+            only job is to let you see and correct what your agents have been doing — the one
+            surface where a human, not an agent, changes the store. Below is <strong>Canvas</strong> — every memory the fleet holds,
+            grouped by topic, disc size proportional to how much is in each.
+          </p>
+        </div>
+      </div>
+
+      <figure class="shot reveal">
+        <div class="shot__chrome">
+          <div class="shot__bar" aria-hidden="true">
+            <span class="sq"></span><span class="sq"></span><span class="sq"></span>
+            <span class="shot__url mono micro">http://127.0.0.1:7444</span>
+            <span class="shot__live"><span class="blip"></span><span class="mono micro dim">LOOPBACK</span></span>
+          </div>
+          <div class="shot__frame">
+            <img src="./assets/app-canvas.png" width="1361" height="896" loading="lazy" decoding="async"
+                 alt="The LEDGER supervision UI on the Canvas screen. A left sidebar lists Review with 47 waiting, Browse with 1,908 memories, Sources 5, Canvas, and Connections 3, above a server-running readout showing uptime, 1,009 requests today and 3.8 MB on disk. The main area shows ten labelled discs of coloured dots — codebases 269, preferences 232, reading and notes 214, people and orgs 208, projects 187, travel and places 177, procedures 170, home and devices 157, health 149, finances 133 — joined by faint link lines, with layout tabs for Clusters, Graph, Timeline and Heat, a topic legend, and a time scrubber reading knowledge as of 2026-08-04.">
+          </div>
+        </div>
+        <figcaption class="micro dim">
+          Canvas · clusters layout, coloured by topic. 1,908 memories, 1,896 in view. Positions
+          ease toward their targets instead of snapping, so switching layouts shows you it is the
+          <em>same</em> memories rearranged — which is the only reason to have four layouts
+          rather than four screens.
+        </figcaption>
+      </figure>
+
+      <div class="sec__body">
+        <div class="reveal">
+          <p class="block__cap eyebrow">The same nodes, four ways</p>
+          <ul class="layouts" role="list">
+            <li>
+              <div class="layouts__img"><img src="./assets/canvas-clusters.png" width="2060" height="1496" loading="lazy" decoding="async" alt="Clusters layout: ten discs of coloured dots, one per topic."></div>
+              <p class="mono micro"><span class="c-accent">CLUSTERS</span></p>
+              <p class="micro dim">Grouped by topic. Disc size is how much is in each.</p>
+            </li>
+            <li>
+              <div class="layouts__img"><img src="./assets/canvas-graph.png" width="2060" height="1496" loading="lazy" decoding="async" alt="Graph layout: dots joined by link lines, with isolated dots scattered around the edges."></div>
+              <p class="mono micro"><span class="c-accent">GRAPH</span></p>
+              <p class="micro dim">How memories link. Isolated dots are things nothing else corroborates.</p>
+            </li>
+            <li>
+              <div class="layouts__img"><img src="./assets/canvas-timeline.png" width="2060" height="1496" loading="lazy" decoding="async" alt="Timeline layout: dots banded into horizontal rows by cluster and spread left to right by creation date."></div>
+              <p class="mono micro"><span class="c-accent">TIMELINE</span></p>
+              <p class="micro dim">When each was written, banded by cluster. Gaps are periods nothing was learned.</p>
+            </li>
+            <li>
+              <div class="layouts__img"><img src="./assets/canvas-heat.png" width="2060" height="1496" loading="lazy" decoding="async" alt="Heat layout: a scatter of dots with retrieval count on the horizontal axis, from never retrieved to retrieved often, and strength on the vertical axis, from decaying to strong."></div>
+              <p class="mono micro"><span class="c-accent">HEAT</span></p>
+              <p class="micro dim">Retrieval against strength. Top right is load-bearing; bottom left is dead weight.</p>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="sec__body">
+        <div class="screens reveal">
+          <article class="screen">
+            <p class="mono micro ghost">01</p>
+            <h3>Review</h3>
+            <p class="micro muted">
+              What your agents learned since you last looked, in two lanes — because “is this
+              right?” and “which of these two is right?” are different decisions. Keyboard-first;
+              reaching for a mouse per item does not scale.
+            </p>
+          </article>
+          <article class="screen">
+            <p class="mono micro ghost">02</p>
+            <h3>Browse</h3>
+            <p class="micro muted">
+              Everything in the store, filterable and operable in bulk. Facets write into the
+              search box rather than into hidden state, so what the table shows is always
+              something you can read, edit and copy.
+            </p>
+          </article>
+          <article class="screen">
+            <p class="mono micro ghost">03</p>
+            <h3>Sources</h3>
+            <p class="micro muted">
+              The documents behind the chunks. The screen exists to make one rule visible: a
+              document is trusted or dropped whole. Move its trust and every chunk’s strength
+              moves with it, immediately.
+            </p>
+          </article>
+          <article class="screen">
+            <p class="mono micro ghost">04</p>
+            <h3>Canvas</h3>
+            <p class="micro muted">
+              Four layouts over the same nodes, drawn to a 2D context so a few thousand memories
+              stay smooth while the time scrubber redraws every frame. Colour by topic, agent,
+              strength or heat; drag the scrubber to see the store as it stood on a date.
+            </p>
+          </article>
+          <article class="screen">
+            <p class="mono micro ghost">05</p>
+            <h3>Connections</h3>
+            <p class="micro muted">
+              Which agents are attached, what they use memory for, and what they have in common.
+              Scopes here are descriptive: identity is self-declared, so the screen reports what
+              agents say they do rather than pretending to enforce it.
+            </p>
+          </article>
+        </div>
+
+        <div class="split reveal">
+          <div class="block">
+            <p class="block__cap eyebrow">Prefer the terminal</p>
+            <div class="scroll-x" tabindex="0">
+<pre class="code out"><code>
+  <b>What your agents learned</b>   <span class="c-accent">CLAIMS 6</span>  <span class="c-dim">conflicts 2</span>
+  <span class="c-dim">1 of 6</span>   <span class="c-dim">tab switches lane</span>
+
+  <span class="c-dim">wren  3d  ·</span>  <span class="c-muted">Money &amp; invoices</span>  <span class="c-accent">██████</span><span class="c-dim">░░ 84</span>
+  <b>Brightpath invoices net-45 in the 2026 contract</b>
+  <span class="c-dim">confirmed by follow-up question</span>
+  <span class="c-dim">#invoice #money</span>
+
+  <span class="c-accent">a</span> keep   <span class="c-accent">e</span> edit   <span class="c-danger">d</span> drop   <span class="c-accent">p</span> pin
+  <span class="c-dim">↑/↓ or j/k move · q quit</span>
+</code></pre>
+            </div>
+            <p class="prose small">
+              <code>ledger review</code> is the same queue and the same keys. It falls back to a
+              plain text dump when stdin is not a TTY, so it is safe to pipe.
+            </p>
+          </div>
+          <aside class="gnote mono micro">
+            <p class="ghost">REVIEW IS</p>
+            <p>an audit,<br>not a gate</p>
+            <p class="ghost">MEANING</p>
+            <p>pending claims are<br>already searchable</p>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────────────────────────────────────── limits -->
+    <section id="limits" class="sec sec--last" data-sec aria-labelledby="limits-h">
+      <div class="sec__head reveal">
+        <p class="eyebrow"><span class="mono">10</span> — Honest limitations</p>
+        <h2 id="limits-h">What this is&nbsp;not.</h2>
+      </div>
+
+      <div class="sec__body">
+        <div class="prose reveal">
+          <p>
+            Every one of these is a deliberate trade, and every one of them will eventually
+            matter to somebody. They are listed here rather than buried because a memory store
+            you cannot audit is a memory store you should not trust.
+          </p>
+        </div>
+
+        <ul class="lims reveal" role="list">
+          <li>
+            <p class="lim__k mono micro">NO EMBEDDINGS</p>
+            <p>
+              Ranking is BM25 widened with character-level fuzz, not vectors. Shipping a model
+              turns a skill into a hundreds-of-megabytes download plus an index-on-every-write
+              cost, to beat lexical search on paraphrases that a fleet of agents writing in
+              their own words mostly does not produce. Consequence: a memory phrased with
+              entirely different vocabulary can be missed. Terms are OR-ed, so a partly wrong
+              query still returns something.
+            </p>
+          </li>
+          <li>
+            <p class="lim__k mono micro">SELF-DECLARED IDENTITY</p>
+            <p>
+              An agent id is whatever <code>--agent</code> or <code>$LEDGER_AGENT</code> says.
+              The store is a file on your disk with one owner, so an id buys attribution and
+              corroboration, not authorisation. The per-agent read/write scopes on the
+              Connections screen are documentation and are <em>not</em> enforced — and because
+              ids are unvalidated, the corroboration signal is trivially inflatable by reading
+              the same memory under three invented names.
+            </p>
+          </li>
+          <li>
+            <p class="lim__k mono micro">BUN REQUIRED</p>
+            <p>
+              <code>cli.js</code> runs on Bun and uses its built-in SQLite. There is no Node
+              build. If Bun is not on the machine, nothing here works — that is the price of
+              a single bundled file with no dependency to fetch.
+            </p>
+          </li>
+          <li>
+            <p class="lim__k mono micro">SCAN CAP — 5 000 ROWS</p>
+            <p>
+              Strength is a function of the current time, so SQLite cannot sort by it: ranking
+              happens in TypeScript over a bounded window of 5 000 rows. When the window fills,
+              results say <span class="mono">capped</span> rather than quietly pretending to be
+              the whole answer. Two honest caveats — the retained rows are whatever SQLite
+              returned first, not the best 5 000, and <code>strength:</code> filters are applied
+              after the window, so they filter within it.
+            </p>
+          </li>
+          <li>
+            <p class="lim__k mono micro">CONFLICT DETECTION IS NOT EXHAUSTIVE</p>
+            <p>
+              Candidates are proposed only on write, only against the 500 most-recently-read
+              claims in the <em>same</em> cluster. A contradiction with a cold claim, or one
+              filed under a different cluster, is never proposed. Editing a claim into
+              contradicting its neighbour does not re-run detection. And once a pair is judged
+              or resolved, it is never proposed again.
+            </p>
+          </li>
+          <li>
+            <p class="lim__k mono micro">REVIEW IS AN AUDIT, NOT A GATE</p>
+            <p>
+              Pending claims are searchable the moment they are written. A memory store that
+              only works once you have cleared a queue is a memory store that does not work.
+            </p>
+          </li>
+          <li>
+            <p class="lim__k mono micro">NO NETWORK PROTOCOL, NO MCP SERVER</p>
+            <p>
+              An earlier version had one. It turned out to be a daemon you had to remember to
+              start, in front of a file the CLI could just open. The HTTP server exists only to
+              serve the supervision UI, and only on loopback.
+            </p>
+          </li>
+        </ul>
+
+        <div class="cta reveal">
+          <p class="eyebrow">Get it</p>
+          <div class="cmd cmd--lg" data-copy-wrap>
+            <span class="cmd__sigil mono" aria-hidden="true">$</span>
+            <code class="mono" data-copy-src>npx skills add kucukkanat/ledger-memory</code>
+            <button class="cmd__btn mono" type="button" data-copy aria-label="Copy the install command">COPY</button>
+          </div>
+          <p class="micro dim">
+            Then <code>bun ~/.claude/skills/ledger-memory/cli.js serve</code> and look at what
+            it has been keeping.
+          </p>
+        </div>
+      </div>
+    </section>
+
+
+
+  </main>
+
+    <footer class="foot" role="contentinfo">
+      <div class="foot__row">
+        <p class="mono micro"><span class="c-accent">▍</span> LEDGER <span class="dim">v0.1.0</span></p>
+        <p class="mono micro dim">Local memory for a fleet of agents, with a human in the loop.</p>
+      </div>
+      <div class="foot__row">
+        <ul class="foot__links mono micro" role="list">
+          <li><a href="https://github.com/kucukkanat/ledger-memory">github.com/kucukkanat/ledger-memory</a></li>
+          <li><a href="https://github.com/kucukkanat/ledger-memory/blob/main/skills/ledger-memory/SKILL.md">SKILL.md</a></li>
+          <li><a href="https://bun.sh">bun.sh</a></li>
+        </ul>
+        <p class="mono micro dim">This page makes no network requests. Neither does the&nbsp;product.</p>
+      </div>
+    </footer>
+</div>
+
+<script src="./ledger.js" defer></script>
+</body>
+</html>
