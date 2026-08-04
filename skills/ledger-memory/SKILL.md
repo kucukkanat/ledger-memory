@@ -1,6 +1,6 @@
 ---
 name: ledger-memory
-description: Remember things across sessions using LEDGER, a local memory store on this machine shared with other agents. Recall before answering anything about the user, their preferences, their projects, their people, or their history — the answer is often already stored from an earlier session. Remember durable facts when you learn them. Also covers judging suspected contradictions between memories, ingesting documents as searchable sources, and asof: time-travel queries. Use when the user says "remember this", "what do you know about", "did I tell you", when you need context that predates this conversation, or when something you were told contradicts something you already know.
+description: Remember things across sessions using LEDGER, a local memory store on this machine shared with other agents. Recall before answering anything about the user, their preferences, their projects, their people, or their history — the answer is often already stored from an earlier session. Remember durable facts when you learn them. Also covers judging suspected contradictions between memories, ingesting documents as searchable sources, and asof time-travel queries. Use when the user says "remember this", "what do you know about", "did I tell you", when you need context that predates this conversation, or when something you were told contradicts something you already know.
 ---
 
 # LEDGER
