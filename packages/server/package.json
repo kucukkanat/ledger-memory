@@ -1,0 +1,31 @@
+{
+  "name": "@ledger/server",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "test": "bun test src",
+    "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@ledger/core": "workspace:*",
+    "hono": "^4.13.0",
+    "neverthrow": "^8.2.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kucukkanat/ledger-memory.git",
+    "directory": "packages/server"
+  }
+}

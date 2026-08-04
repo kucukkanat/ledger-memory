@@ -1,0 +1,54 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/*.db",
+      "!packages/ui/public/fonts",
+      // Build output. Committed because `skills add` copies files rather than
+      // building, but generated — linting it would be linting the bundler.
+      "!skills/ledger-memory/cli.js",
+      "!skills/ledger-memory/ui"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": { "noExplicitAny": "error" },
+      "style": {
+        "noNonNullAssertion": "error",
+        "useConst": "error",
+        "useImportType": "error"
+      },
+      "complexity": {
+        "noForEach": "off",
+        // Directly contradicts TypeScript's noPropertyAccessFromIndexSignature,
+        // which we keep: on an index-signature type, `x.foo` is a type error and
+        // `x['foo']` is the only legal form. The TS rule catches real mistakes;
+        // this one only has an opinion about syntax.
+        "useLiteralKeys": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // The reduced-motion block must beat inline animation styles, which is
+      // exactly the case !important exists for.
+      "includes": ["packages/tokens/src/tokens.css"],
+      "linter": { "rules": { "complexity": { "noImportantStyles": "off" } } }
+    }
+  ],
+  "javascript": {
+    "formatter": { "quoteStyle": "single", "semicolons": "asNeeded", "trailingCommas": "all" }
+  }
+}

@@ -1,0 +1,21 @@
+node_modules
+*.tsbuildinfo
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+test-results
+playwright-report
+
+# Intermediate build output. The UI ships to the skill directory, not from here.
+packages/ui/dist
+
+# Scratch from the docs-site design pass.
+.workflow
+site-proposals
+
+# NOT ignored, deliberately:
+#   packages/ui/public/fonts/*.woff2   — vendored so a fresh clone builds identically
+#   skills/ledger-memory/cli.js        — `skills add` copies files, it never builds
+#   skills/ledger-memory/ui/           — same
+#   docs/                              — GitHub Pages serves this directory

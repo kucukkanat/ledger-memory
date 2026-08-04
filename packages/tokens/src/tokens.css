@@ -1,0 +1,177 @@
+/*
+ * LEDGER design tokens.
+ *
+ * Fonts are self-hosted, never fetched. A Google Fonts <link> would mean the
+ * supervision UI for a store that "never leaves this machine" phones out on
+ * every load, so `bun run fonts:vendor` writes them into public/fonts and the
+ * @font-face blocks below pick them up. Without vendoring, the stacks fall
+ * back to system faces and nothing breaks.
+ */
+
+@font-face {
+  font-family: "Instrument Sans";
+  src: url("/fonts/instrument-sans.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/geist-mono.woff2") format("woff2");
+  font-weight: 300 600;
+  font-display: swap;
+}
+
+:root {
+  --lg-bg: #0a0b0c;
+  --lg-bg-sunken: #08090a;
+  --lg-surface: #0d0f11;
+  --lg-surface-alt: #0c0e10;
+  --lg-surface-hover: #141719;
+  --lg-surface-inset: #0e1012;
+
+  --lg-border: #202427;
+  --lg-border-strong: #2b3036;
+  --lg-border-subtle: #141719;
+
+  --lg-text: #e7e9eb;
+  --lg-text-muted: #a9b0b7;
+  --lg-text-dim: #868d95;
+  --lg-text-faint: #575e66;
+  --lg-text-ghost: #4e555c;
+  --lg-text-trace: #3f464c;
+
+  --lg-accent: #c0f24a;
+  --lg-accent-bright: #d8ff7d;
+  --lg-accent-surface: #151a10;
+  --lg-accent-border: #2f3a1a;
+  --lg-accent-dim: #4d5f24;
+
+  --lg-danger: #e0555f;
+  --lg-danger-border: #4a2429;
+  --lg-danger-surface: #1c1012;
+  --lg-warn: #f2913f;
+  --lg-warn-surface: #14100c;
+  --lg-warn-border: #2a2119;
+
+  --lg-font-sans: "Instrument Sans", system-ui, -apple-system, sans-serif;
+  --lg-font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --lg-radius-sm: 2px;
+  --lg-radius-pill: 999px;
+
+  --lg-space-0-5: 2px;
+  --lg-space-1: 4px;
+  --lg-space-1-5: 6px;
+  --lg-space-2: 8px;
+  --lg-space-3: 12px;
+  --lg-space-4: 16px;
+  --lg-space-5: 20px;
+  --lg-space-6: 24px;
+  --lg-space-8: 32px;
+
+  --lg-text-eyebrow: 9px;
+  --lg-text-micro: 10px;
+  --lg-text-tiny: 11px;
+  --lg-text-small: 12.5px;
+  --lg-text-body: 13px;
+  --lg-text-large: 15px;
+  --lg-text-title: 17px;
+  --lg-text-display: 27px;
+
+  --lg-track-eyebrow: 0.18em;
+  --lg-track-label: 0.14em;
+  --lg-track-tight: -0.02em;
+
+  --lg-duration-fast: 120ms;
+  --lg-duration-base: 150ms;
+  --lg-duration-slow: 220ms;
+  --lg-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --lg-row-height: 30px;
+  --lg-shadow-panel: 0 18px 44px #000d;
+  --lg-shadow-toast: 0 10px 40px #000b;
+}
+
+:root[data-density="compact"] {
+  --lg-row-height: 24px;
+}
+
+@keyframes lg-blip {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes lg-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes lg-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes lg-rise-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@keyframes lg-slide-left {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes lg-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes lg-eq {
+  0%,
+  100% {
+    transform: scaleY(0.22);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

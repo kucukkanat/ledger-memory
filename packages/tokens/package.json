@@ -1,0 +1,28 @@
+{
+  "name": "@ledger/tokens",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": [
+    "./src/tokens.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./tokens.css": "./src/tokens.css"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "typecheck": "tsc --build"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kucukkanat/ledger-memory.git",
+    "directory": "packages/tokens"
+  }
+}

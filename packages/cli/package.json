@@ -1,0 +1,33 @@
+{
+  "name": "@ledger/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "ledger": "./src/bin.ts"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "test": "bun test src",
+    "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@ledger/core": "workspace:*",
+    "@ledger/server": "workspace:*",
+    "@ledger/tokens": "workspace:*"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kucukkanat/ledger-memory.git",
+    "directory": "packages/cli"
+  }
+}
