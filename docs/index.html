@@ -6,12 +6,13 @@
 <title>LEDGER — local memory for a fleet of agents</title>
 <meta name="description" content="LEDGER is a local-first memory store for AI agents, installed as a skill. Claims decay, chunks do not. Strength is computed, never stored. The store proposes conflicts, agents judge them, you resolve them.">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.add("js")</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0b0c'/%3E%3Crect x='9' y='9' width='14' height='14' fill='%23c0f24a' transform='rotate(45 16 16)'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="./ledger.css">
 </head>
 <body>
 
-<a class="skip" href="#overview">Skip to content</a>
+<a class="skip" href="#main">Skip to content</a>
 
 <!-- ───────────────────────────────────────────────────────── instrument bar -->
 <header class="bar" role="banner">
@@ -29,7 +30,7 @@
 
     <div class="segbar" aria-hidden="true" data-segbar></div>
 
-    <span class="bar__pct mono micro" data-pct>000</span>
+    <span class="bar__pct mono micro" data-pct aria-hidden="true">000</span>
     <a class="bar__gh mono micro" href="https://github.com/kucukkanat/ledger-memory">GITHUB&nbsp;↗</a>
   </div>
 </header>
@@ -57,7 +58,7 @@
     </div>
   </nav>
 
-  <main class="main" id="main">
+  <main class="main" id="main" tabindex="-1">
 
     <!-- ───────────────────────────────────────────────────────────── hero -->
     <section class="hero" aria-labelledby="hero-h">
@@ -601,13 +602,13 @@ ledger resolve cf_msdvpz01x8 merge</code></pre>
         <div class="scroll-x reveal">
           <table class="tbl tbl--cmp">
             <caption class="vh">recall compared with search</caption>
-            <thead><tr><th scope="col"></th><th scope="col"><code>recall</code></th><th scope="col"><code>search</code></th></tr></thead>
+            <thead><tr><th scope="col"><span class="vh">Dimension</span></th><th scope="col"><code>recall</code></th><th scope="col"><code>search</code></th></tr></thead>
             <tbody>
               <tr><th scope="row">Audience</th><td>agents</td><td>you</td></tr>
               <tr><th scope="row">Counts as a retrieval</th><td class="yes">Yes</td><td class="no">No</td></tr>
               <tr><th scope="row">Agent id sent to the store</th><td><code>--agent</code> / <code>$LEDGER_AGENT</code></td><td class="no">none at all</td></tr>
               <tr><th scope="row">Default <code>--limit</code></th><td class="mono">10</td><td class="mono">25</td></tr>
-              <tr><th scope="row">Layout</th><td>one parseable line per hit, full id, untruncated text</td><td>a table: short id, bar, writer, 70-column text, cluster, age</td></tr>
+              <tr><th scope="row">Layout</th><td>one parseable line per hit, full id, untruncated text</td><td>a table: short id, strength bar, strength, writer, 70-column text, cluster, last read</td></tr>
               <tr><th scope="row">Empty result</th><td class="mono">nothing remembered about that</td><td class="mono">▍ 0 memories  8ms</td></tr>
             </tbody>
           </table>
@@ -960,7 +961,7 @@ m_msdvpyi6f2x7zr   51  Brightpath pays late by about nine days<span class="c-dim
   <b>What your agents learned</b>   <span class="c-accent">CLAIMS 6</span>  <span class="c-dim">conflicts 2</span>
   <span class="c-dim">1 of 6</span>   <span class="c-dim">tab switches lane</span>
 
-  <span class="c-dim">wren  3d  ·</span>  <span class="c-muted">Money &amp; invoices</span>  <span class="c-accent">██████</span><span class="c-dim">░░ 84</span>
+  <span class="c-dim">wren  3d  ·</span>  <span class="c-muted">Money &amp; invoices</span>  <span class="c-accent">█████</span><span class="c-dim">░ 84</span>
   <b>Brightpath invoices net-45 in the 2026 contract</b>
   <span class="c-dim">confirmed by follow-up question</span>
   <span class="c-dim">#invoice #money</span>

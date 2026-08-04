@@ -498,8 +498,10 @@ pre.code.out { background: var(--bg-sunken); color: var(--dim); }
 .term .scroll-x { background: var(--surface-inset); }
 .term__body { border: 0; border-radius: 0; padding: 15px; }
 .term__out { display: block; color: var(--dim); }
-.term__out > .ln { display: block; opacity: 0; }
-.term__out > .ln.in { opacity: 1; transition: opacity var(--fast) var(--ease); }
+.term__out > .ln { display: block; }
+/* Typed-out terminal lines only start hidden when JS is there to reveal them. */
+.js .term__out > .ln { opacity: 0; }
+.js .term__out > .ln.in { opacity: 1; transition: opacity var(--fast) var(--ease); }
 .caret {
   display: inline-block; width: 7px; height: 13px;
   background: var(--accent); vertical-align: -2px; margin-left: 1px;
@@ -734,14 +736,17 @@ pre.code.out { background: var(--bg-sunken); color: var(--dim); }
 
 /* ------------------------------------------------------------------ reveals */
 
-.reveal {
+/* Scoped to .js (set by an inline script before first paint) so that if
+   ledger.js fails to load or throws, the page renders in full rather than as a
+   blank screen — 52 elements depend on this class being removed. */
+.js .reveal {
   opacity: 0;
   transform: translateY(8px);
   transition: opacity var(--slow) var(--ease), transform var(--slow) var(--ease);
 }
-.reveal.in { opacity: 1; transform: none; }
+.js .reveal.in { opacity: 1; transform: none; }
 
-.ideas.in li, .factors.in .factor, .pipe.in .pipe__stage, .screens.in .screen, .keys.in .keys__lane {
+.js .ideas.in li, .js .factors.in .factor, .js .pipe.in .pipe__stage, .js .screens.in .screen, .js .keys.in .keys__lane {
   animation: fade var(--slow) var(--ease) both;
 }
 .ideas.in li:nth-child(2), .factors.in .factor:nth-child(2), .pipe.in .pipe__stage:nth-child(2),
@@ -764,8 +769,8 @@ pre.code.out { background: var(--bg-sunken); color: var(--dim); }
     animation-delay: 0ms !important;
     transition-delay: 0ms !important;
   }
-  .reveal { opacity: 1; transform: none; }
+  .js .reveal { opacity: 1; transform: none; }
   .blip, .eq span, .caret { animation: none; }
   .caret { opacity: .6; }
-  .term__out > .ln { opacity: 1; }
+  .js .term__out > .ln { opacity: 1; }
 }
