@@ -52,7 +52,6 @@ export type WriteInput = {
   readonly cluster: string
   readonly agent: string
   readonly origin?: MemoryOrigin
-  readonly tags?: readonly string[]
   readonly provenance?: string
   readonly sourceId?: string | null
   /** Explicitly declare that this replaces an existing claim. */
@@ -195,14 +194,6 @@ export const openStore = (options: StoreOptions) => {
       `INSERT INTO agents (id, label, role, color, endpoint, first_seen, last_seen)
        VALUES (?, ?, '', ?, '', ?, ?)`,
     ).run(id, id, color, at, at)
-  }
-
-  const setTags = (memoryId: string, tags: readonly string[]): void => {
-    const insert = db.query('INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)')
-    for (const tag of tags) {
-      const clean = tag.trim().toLowerCase()
-      if (clean) insert.run(memoryId, clean)
-    }
   }
 
   const addReader = (memoryId: string, agentId: string): void => {
@@ -502,7 +493,6 @@ export const openStore = (options: StoreOptions) => {
           at,
         )
         addReader(id, input.agent)
-        setTags(id, input.tags ?? [])
         indexText(id, text)
       })
       insert()
@@ -611,14 +601,6 @@ export const openStore = (options: StoreOptions) => {
             .join(',')}))`,
         )
         params.push(...q.agent)
-      }
-      if (q.tag.length > 0) {
-        where.push(
-          `EXISTS (SELECT 1 FROM memory_tags t WHERE t.memory_id = m.id AND t.tag IN (${q.tag
-            .map(() => '?')
-            .join(',')}))`,
-        )
-        params.push(...q.tag)
       }
       if (q.before !== null) {
         where.push('m.created_at < ?')
@@ -732,7 +714,6 @@ export const openStore = (options: StoreOptions) => {
       patch: {
         text?: string
         cluster?: string
-        tags?: readonly string[]
         provenance?: string
       },
       agent: string,
@@ -755,10 +736,6 @@ export const openStore = (options: StoreOptions) => {
         }
         if (patch.provenance !== undefined) {
           db.query('UPDATE memories SET provenance = ? WHERE id = ?').run(patch.provenance, id)
-        }
-        if (patch.tags !== undefined) {
-          db.query('DELETE FROM memory_tags WHERE memory_id = ?').run(id)
-          setTags(id, patch.tags)
         }
       })
       apply()
@@ -792,17 +769,6 @@ export const openStore = (options: StoreOptions) => {
       return ids.length
     },
 
-    tag: (ids: readonly string[], tag: string, agent: string): number => {
-      const clean = tag.trim().toLowerCase()
-      if (!clean) return 0
-      const apply = db.transaction(() => {
-        for (const id of ids) setTags(id, [clean])
-      })
-      apply()
-      record(agent, 'memory.tag', null, `${ids.length} as "${clean}"`)
-      return ids.length
-    },
-
     remove: (ids: readonly string[], agent: string): number => {
       const apply = db.transaction(() => {
         for (const id of ids) softDelete(id, agent, 'dropped')
@@ -814,9 +780,9 @@ export const openStore = (options: StoreOptions) => {
     /**
      * Fold several memories into the first.
      *
-     * Hits are summed and readers/tags unioned because the merged memory
-     * genuinely carries all that evidence — losing it would understate the
-     * strength of the thing that survives.
+     * Hits are summed and readers unioned because the merged memory genuinely
+     * carries all that evidence — losing it would understate the strength of
+     * the thing that survives.
      */
     merge: (ids: readonly string[], agent: string): Result<Memory, LedgerFailure> => {
       if (ids.length < 2) {
@@ -840,9 +806,6 @@ export const openStore = (options: StoreOptions) => {
           ).run(row.hits, row.source_count, row.last_read_at, keepId)
           db.query(
             'INSERT OR IGNORE INTO memory_readers (memory_id, agent_id) SELECT ?, agent_id FROM memory_readers WHERE memory_id = ?',
-          ).run(keepId, id)
-          db.query(
-            'INSERT OR IGNORE INTO memory_tags (memory_id, tag) SELECT ?, tag FROM memory_tags WHERE memory_id = ?',
           ).run(keepId, id)
           softDelete(id, agent, `merged into ${keepId}`)
         }
@@ -909,11 +872,6 @@ export const openStore = (options: StoreOptions) => {
           `SELECT r.agent_id, count(*) AS n FROM memory_readers r
              JOIN memories m ON m.id = r.memory_id AND m.deleted_at IS NULL GROUP BY r.agent_id`,
         ),
-        tag: counts<{ tag: string; n: number }>(
-          `SELECT t.tag, count(*) AS n FROM memory_tags t
-             JOIN memories m ON m.id = t.memory_id AND m.deleted_at IS NULL
-            GROUP BY t.tag ORDER BY n DESC LIMIT 40`,
-        ),
         flags: db
           .query(
             `SELECT
@@ -930,12 +888,6 @@ export const openStore = (options: StoreOptions) => {
         },
       }
     },
-
-    tags: (): string[] =>
-      db
-        .query('SELECT DISTINCT tag FROM memory_tags ORDER BY tag')
-        .all()
-        .map((r) => (r as { tag: string }).tag),
   }
 
   // ------------------------------------------------------------------ review
@@ -1302,8 +1254,10 @@ export const openStore = (options: StoreOptions) => {
      * Drop a source and everything that came out of it.
      *
      * Chunks go — they have no meaning without the document. Claims distilled
-     * from it survive but are flagged, because an agent already judged them
-     * worth keeping and they may be corroborated elsewhere.
+     * from it survive, because an agent already judged them worth keeping and
+     * they may be corroborated elsewhere. They do go back into the review
+     * queue: the evidence behind them just disappeared, so the judgement that
+     * kept them deserves to be made again.
      */
     drop: (
       id: string,
@@ -1332,7 +1286,6 @@ export const openStore = (options: StoreOptions) => {
       const apply = db.transaction(() => {
         for (const chunkId of chunkIds) softDelete(chunkId, agent, `source ${id} dropped`)
         for (const claimId of claimIds) {
-          setTags(claimId, ['orphaned-source'])
           db.query('UPDATE memories SET reviewed_at = NULL WHERE id = ?').run(claimId)
         }
         db.query('UPDATE sources SET dropped_at = ? WHERE id = ?').run(now(), id)

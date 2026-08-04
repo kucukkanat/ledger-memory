@@ -668,7 +668,7 @@ m_msdvpyi6f2x7zr   51  Brightpath pays late by about nine days<span class="c-dim
               <thead><tr><th scope="col">Command</th><th scope="col">What it does</th><th scope="col">Key flags</th><th scope="col" class="num">Retrieval</th></tr></thead>
               <tbody>
                 <tr><th scope="row"><code>recall &lt;query&gt;</code></th><td>Search; the agent’s read verb</td><td class="mono micro">--agent --limit 10 --mode --json</td><td class="num yes mono">yes</td></tr>
-                <tr><th scope="row"><code>remember &lt;text&gt;</code></th><td>Write one claim</td><td class="mono micro">--cluster* --tags --note --json</td><td class="num dim mono">—</td></tr>
+                <tr><th scope="row"><code>remember &lt;text&gt;</code></th><td>Write one claim</td><td class="mono micro">--cluster* --note --json</td><td class="num dim mono">—</td></tr>
                 <tr><th scope="row"><code>forget &lt;id…&gt;</code></th><td>Soft-drop memories</td><td class="mono micro">--agent</td><td class="num dim mono">—</td></tr>
                 <tr><th scope="row"><code>link &lt;a&gt; &lt;b&gt;</code></th><td>Record that two memories are related</td><td class="mono micro">--agent</td><td class="num dim mono">—</td></tr>
                 <tr><th scope="row"><code>clusters</code></th><td>The topic taxonomy; <code>clusters add</code> creates one</td><td class="mono micro">--json</td><td class="num dim mono">—</td></tr>
@@ -782,7 +782,6 @@ m_msdvpyi6f2x7zr   51  Brightpath pays late by about nine days<span class="c-dim
             <tbody>
               <tr><th scope="row" class="mono">agent:</th><td>written or read by that agent</td><td class="mono micro">recall "deploy checklist agent:forge"</td></tr>
               <tr><th scope="row" class="mono">cluster:</th><td>topic cluster (the id, not the label)</td><td class="mono micro">recall "node cluster:code"</td></tr>
-              <tr><th scope="row" class="mono">tag:</th><td>an applied tag</td><td class="mono micro">search "invoice tag:build tag:release"</td></tr>
               <tr><th scope="row" class="mono">type:</th><td><code>chat</code> or <code>doc</code> — said, or from a document</td><td class="mono micro">search "handbook type:doc"</td></tr>
               <tr><th scope="row" class="mono">kind:</th><td><code>claim</code> or <code>chunk</code></td><td class="mono micro">recall "retention policy kind:chunk"</td></tr>
               <tr><th scope="row" class="mono">strength:</th><td><code>&lt;N</code> or <code>&gt;N</code>, N between 0 and 100</td><td class="mono micro">search "cluster:code strength:&gt;70"</td></tr>

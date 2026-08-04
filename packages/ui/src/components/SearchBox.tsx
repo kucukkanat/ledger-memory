@@ -7,8 +7,8 @@ import { fmtN } from '../format.ts'
  * The search box and its filter autocomplete.
  *
  * Suggestions come from what is actually in the store — real clusters, real
- * agents, real tags, with counts — so the box teaches the query language by
- * showing what it can answer rather than by documenting itself.
+ * agents, with counts — so the box teaches the query language by showing what
+ * it can answer rather than by documenting itself.
  */
 
 type Suggestion = {
@@ -22,7 +22,6 @@ type Suggestion = {
 const KEYS: readonly (readonly [string, string])[] = [
   ['agent', 'written or read by an agent'],
   ['cluster', 'topic cluster'],
-  ['tag', 'applied tag'],
   ['type', 'chat or doc'],
   ['kind', 'claim or chunk'],
   ['strength', 'how much the store trusts it, e.g. strength:<40'],
@@ -80,7 +79,6 @@ const suggest = (
 
   const clusterCounts = new Map(facets?.cluster.map((c) => [c.cluster_id, c.n]) ?? [])
   const agentCounts = new Map(facets?.agent.map((a) => [a.agent_id, a.n]) ?? [])
-  const tagCounts = new Map(facets?.tag.map((t) => [t.tag, t.n]) ?? [])
   const originCounts = new Map(facets?.origin.map((o) => [o.origin, o.n]) ?? [])
 
   const rows: [string, string, number | null][] =
@@ -88,21 +86,19 @@ const suggest = (
       ? (stats?.clusters ?? []).map((c) => [c.id, c.label, clusterCounts.get(c.id) ?? 0])
       : key === 'agent'
         ? [...agentCounts].map(([id, n]) => [id, '', n])
-        : key === 'tag'
-          ? [...tagCounts].map(([tag, n]) => [tag, '', n])
-          : key === 'type'
+        : key === 'type'
+          ? [
+              ['chat', 'said in conversation', originCounts.get('chat') ?? 0],
+              ['doc', 'from a document', originCounts.get('doc') ?? 0],
+            ]
+          : key === 'kind'
             ? [
-                ['chat', 'said in conversation', originCounts.get('chat') ?? 0],
-                ['doc', 'from a document', originCounts.get('doc') ?? 0],
+                ['claim', 'an assertion', stats?.claims ?? 0],
+                ['chunk', 'a slice of a document', stats?.chunks ?? 0],
               ]
-            : key === 'kind'
-              ? [
-                  ['claim', 'an assertion', stats?.claims ?? 0],
-                  ['chunk', 'a slice of a document', stats?.chunks ?? 0],
-                ]
-              : key === 'strength'
-                ? STRENGTH_VALUES.map(([v, hint]) => [v, hint, null])
-                : dateValues(key as 'asof' | 'after' | 'before').map(([v, hint]) => [v, hint, null])
+            : key === 'strength'
+              ? STRENGTH_VALUES.map(([v, hint]) => [v, hint, null])
+              : dateValues(key as 'asof' | 'after' | 'before').map(([v, hint]) => [v, hint, null])
 
   return rows
     .filter(([v]) => v.toLowerCase().startsWith(value))

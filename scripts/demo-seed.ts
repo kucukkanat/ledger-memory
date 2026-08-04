@@ -222,13 +222,11 @@ const SLOT: Record<string, readonly string[]> = {
 const CLUSTERS: readonly {
   id: string
   n: number
-  tags: readonly string[]
   templates: readonly string[]
 }[] = [
   {
     id: 'prefs',
     n: 232,
-    tags: ['style', 'ui', 'format'],
     templates: [
       'Prefers {pref} for {ctx}',
       'Dislikes {dislike} in {ctx}',
@@ -238,7 +236,6 @@ const CLUSTERS: readonly {
   {
     id: 'people',
     n: 208,
-    tags: ['contact', 'org', 'intro'],
     templates: [
       '{person} — {role} at {org}, met {met}',
       '{person} prefers {channel} for anything time-sensitive',
@@ -248,43 +245,36 @@ const CLUSTERS: readonly {
   {
     id: 'code',
     n: 268,
-    tags: ['opal', 'build', 'api', 'ci'],
     templates: ['{mod} {issue} — {fix}', 'Never {never} in {mod}; {why}', '{mod} {issue}'],
   },
   {
     id: 'travel',
     n: 176,
-    tags: ['trip', 'booking', 'place'],
     templates: ['{city}: {place}, {placedetail}', 'Booked {place} for {city} — {placedetail}'],
   },
   {
     id: 'health',
     n: 148,
-    tags: ['diet', 'training', 'medical'],
     templates: ['{healthfact}', 'Trains {trainday}, {trainnote}'],
   },
   {
     id: 'money',
     n: 132,
-    tags: ['invoice', 'tax', 'sub'],
     templates: ['{org} invoices {terms}, {payhabit}', '{moneything} due {due}'],
   },
   {
     id: 'home',
     n: 156,
-    tags: ['device', 'network', 'house'],
     templates: ['{device} {devicefact}', 'To reset {device}: {resetstep}'],
   },
   {
     id: 'reading',
     n: 214,
-    tags: ['note', 'paper', 'quote'],
     templates: ['Highlighted: {idea}, from {source}', '{source} argues {idea}'],
   },
   {
     id: 'proc',
     n: 168,
-    tags: ['runbook', 'ritual', 'checklist'],
     templates: [
       'To {procgoal}: {procsteps}',
       '{ritual} runs {when}',
@@ -294,7 +284,6 @@ const CLUSTERS: readonly {
   {
     id: 'projects',
     n: 186,
-    tags: ['kestrel', 'status', 'deadline'],
     templates: ['{proj} {projmove} after {projreason}', '{proj} is blocked on {blocker}'],
   },
 ]
@@ -311,7 +300,6 @@ for (const cluster of CLUSTERS) {
       text: fill(pick(cluster.templates)),
       cluster: cluster.id,
       agent: pick(AGENTS).id,
-      tags: [pick(cluster.tags)],
     })
     if (written.isOk()) ids.push(written.value.id)
   }

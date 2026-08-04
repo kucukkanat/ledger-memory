@@ -61,7 +61,7 @@ already told you twice.
 
 ```bash
 bun "$LEDGER" remember "Brightpath moved to net-45 in the 2026 contract" \
-  --cluster money --tags invoice --note "confirmed by follow-up question"
+  --cluster money --note "confirmed by follow-up question"
 ```
 
 A good memory is **one self-contained sentence**. It gets read months from now
@@ -178,7 +178,6 @@ Free text plus any of these, in the same string:
 ```
 agent:forge          written or read by that agent
 cluster:code         topic cluster
-tag:build            an applied tag
 type:chat|doc        said in conversation, or from a document
 kind:claim|chunk     assertions, or document slices
 strength:<40         fading    (also strength:>70 for load-bearing)

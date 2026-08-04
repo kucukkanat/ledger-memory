@@ -105,13 +105,13 @@ ledger recall "invoice terms brightpath"
 ```
 ```
 2 memories
-m_msdvpyg9lkdujq   84  Brightpath invoices net-45 in the 2026 contract  [money, invoice]
-m_msdvpyi6f2x7zr   51  Brightpath pays late by about nine days  [money, invoice]
+m_msdvpyg9lkdujq   84  Brightpath invoices net-45 in the 2026 contract  [money]
+m_msdvpyi6f2x7zr   51  Brightpath pays late by about nine days  [money]
 ```
 
 ```bash
 ledger remember "Brightpath moved to net-45 in the 2026 contract" \
-  --cluster money --tags invoice --note "confirmed by follow-up question"
+  --cluster money --note "confirmed by follow-up question"
 
 ledger conflicts
 ledger judge cc_msdvpyi8r1tj4u --verdict conflict --kind "stale terms" --detector 0.9
@@ -183,7 +183,6 @@ Free text plus filters, identical in the CLI and the UI search box:
 ```
 agent:forge          written or read by that agent
 cluster:code         topic cluster
-tag:build            an applied tag
 type:chat|doc        said in conversation, or from a document
 kind:claim|chunk     assertions, or document slices
 strength:<40         fading            (also strength:>70)

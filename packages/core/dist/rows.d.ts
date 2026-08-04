@@ -22,7 +22,6 @@ export type MemoryRow = {
     reviewed_at: number | null;
     deleted_at: number | null;
     readers: string | null;
-    tags: string | null;
     conflict_with: string | null;
 };
 /**
@@ -30,6 +29,6 @@ export type MemoryRow = {
  * strength is calculated. Keeping it here is what stops a stale strength from
  * ever being written down.
  */
-export declare const SELECT_MEMORY = "\nSELECT\n  m.*,\n  c.label AS cluster_label,\n  c.color AS cluster_color,\n  s.trust AS source_trust,\n  (SELECT group_concat(agent_id, ',') FROM memory_readers r WHERE r.memory_id = m.id) AS readers,\n  (SELECT group_concat(tag, ',')      FROM memory_tags    t WHERE t.memory_id = m.id) AS tags,\n  (SELECT CASE WHEN cf.a = m.id THEN cf.b ELSE cf.a END\n     FROM conflicts cf\n    WHERE cf.status = 'open' AND (cf.a = m.id OR cf.b = m.id)\n    LIMIT 1) AS conflict_with\nFROM memories m\nJOIN clusters c ON c.id = m.cluster_id\nLEFT JOIN sources s ON s.id = m.source_id\n";
+export declare const SELECT_MEMORY = "\nSELECT\n  m.*,\n  c.label AS cluster_label,\n  c.color AS cluster_color,\n  s.trust AS source_trust,\n  (SELECT group_concat(agent_id, ',') FROM memory_readers r WHERE r.memory_id = m.id) AS readers,\n  (SELECT CASE WHEN cf.a = m.id THEN cf.b ELSE cf.a END\n     FROM conflicts cf\n    WHERE cf.status = 'open' AND (cf.a = m.id OR cf.b = m.id)\n    LIMIT 1) AS conflict_with\nFROM memories m\nJOIN clusters c ON c.id = m.cluster_id\nLEFT JOIN sources s ON s.id = m.source_id\n";
 export declare const hydrate: (row: MemoryRow, now: number) => Memory;
 //# sourceMappingURL=rows.d.ts.map

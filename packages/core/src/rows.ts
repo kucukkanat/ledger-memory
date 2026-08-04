@@ -24,7 +24,6 @@ export type MemoryRow = {
   reviewed_at: number | null
   deleted_at: number | null
   readers: string | null
-  tags: string | null
   conflict_with: string | null
 }
 
@@ -40,7 +39,6 @@ SELECT
   c.color AS cluster_color,
   s.trust AS source_trust,
   (SELECT group_concat(agent_id, ',') FROM memory_readers r WHERE r.memory_id = m.id) AS readers,
-  (SELECT group_concat(tag, ',')      FROM memory_tags    t WHERE t.memory_id = m.id) AS tags,
   (SELECT CASE WHEN cf.a = m.id THEN cf.b ELSE cf.a END
      FROM conflicts cf
     WHERE cf.status = 'open' AND (cf.a = m.id OR cf.b = m.id)
@@ -79,7 +77,6 @@ export const hydrate = (row: MemoryRow, now: number): Memory => {
     clusterColor: row.cluster_color,
     writer: row.writer,
     readers,
-    tags: split(row.tags),
     sourceId: row.source_id,
     chunkIndex: row.chunk_index,
     provenance: row.provenance,

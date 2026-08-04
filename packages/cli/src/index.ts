@@ -53,12 +53,11 @@ ${dim('For you')}
   ${accent('stats')}                     what is in the store
   ${accent('export')} [query]            matching memories as JSONL
 
-${dim('Filters')}  ${dim('agent: cluster: tag: type: kind: strength:<40 asof: after: before:')}
+${dim('Filters')}  ${dim('agent: cluster: type: kind: strength:<40 asof: after: before:')}
 
 ${dim('Options')}
   --agent <id>       who is acting        ${dim('($LEDGER_AGENT, default "agent")')}
   --cluster <id>     cluster to write to
-  --tags a,b         tags for remember
   --json             machine-readable output
   --limit <n>        results              ${dim('(default 10 recall, 25 search)')}
   --db <path>        store location       ${dim('($LEDGER_DB)')}
@@ -71,7 +70,6 @@ type Options = {
   db: string
   agent: string
   cluster: string | undefined
-  tags: string[]
   port: number
   host: string
   json: boolean
@@ -113,7 +111,7 @@ const fail = (message: string): never => {
 const agentLine = (m: Memory): string =>
   `${m.id}  ${String(Math.round(m.strength * 100)).padStart(3)}  ${m.text
     .replace(/\s+/g, ' ')
-    .trim()}${dim(`  [${[m.clusterId, ...m.tags].join(', ')}]`)}`
+    .trim()}${dim(`  [${m.clusterId}]`)}`
 
 export const run = async (argv: readonly string[]): Promise<void> => {
   const { values, positionals } = parseArgs({
@@ -123,7 +121,6 @@ export const run = async (argv: readonly string[]): Promise<void> => {
       db: { type: 'string' },
       agent: { type: 'string' },
       cluster: { type: 'string' },
-      tags: { type: 'string' },
       port: { type: 'string' },
       host: { type: 'string' },
       trust: { type: 'string' },
@@ -143,12 +140,6 @@ export const run = async (argv: readonly string[]): Promise<void> => {
     db: values.db ?? storePath(),
     agent: values.agent ?? defaultAgent(),
     cluster: values.cluster,
-    tags: values.tags
-      ? values.tags
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean)
-      : [],
     port: values.port ? Number(values.port) : DEFAULT_PORT,
     host: values.host ?? '127.0.0.1',
     json: values.json ?? false,
@@ -213,7 +204,6 @@ export const run = async (argv: readonly string[]): Promise<void> => {
           text,
           cluster: options.cluster ?? '',
           agent: options.agent,
-          tags: options.tags,
           ...(options.note ? { provenance: options.note } : {}),
         })
         if (written.isErr()) fail(explain(written.error))

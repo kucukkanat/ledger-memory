@@ -23,14 +23,13 @@ const makeStore = () => {
 const write = (
   store: Store,
   text: string,
-  overrides: Partial<{ cluster: string; agent: string; tags: string[] }> = {},
+  overrides: Partial<{ cluster: string; agent: string }> = {},
 ) =>
   store.memories
     .write({
       text,
       cluster: overrides.cluster ?? 'prefs',
       agent: overrides.agent ?? 'wren',
-      tags: overrides.tags ?? [],
     })
     ._unsafeUnwrap()
 
@@ -159,14 +158,11 @@ describe('retrieval and strength', () => {
 
 describe('search', () => {
   beforeEach(() => {
-    write(store, 'Prefers metric units in all outputs', { tags: ['style'] })
-    write(store, 'Wants dates written as 2026-08-03, never 8/3/26', {
-      tags: ['format'],
-    })
+    write(store, 'Prefers metric units in all outputs')
+    write(store, 'Wants dates written as 2026-08-03, never 8/3/26')
     write(store, 'opal/parser panics on empty frontmatter', {
       cluster: 'code',
       agent: 'forge',
-      tags: ['opal'],
     })
   })
 
@@ -184,10 +180,9 @@ describe('search', () => {
     ).toBeGreaterThan(0)
   })
 
-  test('filters by cluster, agent and tag', () => {
+  test('filters by cluster and agent', () => {
     expect(store.memories.search({ query: 'cluster:code' })._unsafeUnwrap().total).toBe(1)
     expect(store.memories.search({ query: 'agent:forge' })._unsafeUnwrap().total).toBe(1)
-    expect(store.memories.search({ query: 'tag:style' })._unsafeUnwrap().total).toBe(1)
   })
 
   test('returns everything when the query is only filters', () => {
@@ -566,8 +561,10 @@ describe('sources', () => {
 
     const after = store.memories.get(claim.id)._unsafeUnwrap()
     expect(after.deletedAt).toBeNull()
-    expect(after.tags).toContain('orphaned-source')
+    // Re-review is the whole flag: the evidence behind the claim is gone, so
+    // the judgement that kept it has to be made again.
     expect(after.reviewedAt).toBeNull()
+    expect(store.review.pending().map((p) => p.id)).toContain(claim.id)
     expect(store.sources.list()).toHaveLength(0)
   })
 
@@ -597,16 +594,13 @@ describe('sources', () => {
 })
 
 describe('bulk operations', () => {
-  test('merging sums hits and unions tags and readers', () => {
-    const a = write(store, 'Prefers metric units', { tags: ['style'] })
-    const b = write(store, 'Wants metric units everywhere', {
-      tags: ['format'],
-    })
+  test('merging sums hits and unions readers', () => {
+    const a = write(store, 'Prefers metric units')
+    const b = write(store, 'Wants metric units everywhere')
     store.memories.countReads([b.id], 'atlas')
 
     const merged = store.memories.merge([a.id, b.id], 'tolga')._unsafeUnwrap()
     expect(merged.hits).toBe(1)
-    expect([...merged.tags].sort()).toEqual(['format', 'style'])
     expect([...merged.readers].sort()).toEqual(['atlas', 'wren'])
     expect(store.memories.get(b.id)._unsafeUnwrap().deletedAt).not.toBeNull()
   })
@@ -616,14 +610,6 @@ describe('bulk operations', () => {
     expect(store.memories.merge([a.id], 'tolga')._unsafeUnwrapErr()).toMatchObject({
       kind: 'invalid-input',
     })
-  })
-
-  test('tagging applies to every selected memory', () => {
-    const a = write(store, 'one')
-    const b = write(store, 'two')
-    store.memories.tag([a.id, b.id], 'Reviewed', 'tolga')
-    expect(store.memories.get(a.id)._unsafeUnwrap().tags).toContain('reviewed')
-    expect(store.memories.tags()).toContain('reviewed')
   })
 
   test('export emits one JSON object per line', () => {

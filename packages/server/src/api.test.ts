@@ -188,11 +188,6 @@ describe('bulk operations', () => {
     const a = seed('one')
     expect((await send('POST', '/memories/bulk', { op: 'nuke', ids: [a.id] })).status).toBe(400)
   })
-
-  test('tagging requires a tag', async () => {
-    const a = seed('one')
-    expect((await send('POST', '/memories/bulk', { op: 'tag', ids: [a.id] })).status).toBe(400)
-  })
 })
 
 describe('sources', () => {
@@ -271,8 +266,26 @@ describe('graph', () => {
     })
     expect(((await json(await get('/graph')))['nodes'] as unknown[]).length).toBe(1)
     expect(
-      ((await json(await get('/graph?chunks=1')))['nodes'] as unknown[]).length,
+      ((await json(await get('/graph?kind=all')))['nodes'] as unknown[]).length,
     ).toBeGreaterThan(1)
+    const chunks = (await json(await get('/graph?kind=chunk')))['nodes'] as { kind: string }[]
+    expect(chunks.length).toBeGreaterThan(0)
+    expect(chunks.every((n) => n.kind === 'chunk')).toBe(true)
+  })
+
+  test('takes the same supervision filters as the table, so one rail drives both', async () => {
+    const pinned = seed('kept at full strength')
+    const other = seed('ordinary')
+    store.memories.pin([pinned.id], true, 'human')
+
+    const only = (await json(await get('/graph?pinned=1')))['nodes'] as { id: string }[]
+    expect(only.map((n) => n.id)).toEqual([pinned.id])
+
+    store.memories.archive([other.id], true, 'human')
+    const visible = (await json(await get('/graph')))['nodes'] as { id: string }[]
+    expect(visible.map((n) => n.id)).toEqual([pinned.id])
+    const withArchived = (await json(await get('/graph?archived=1')))['nodes'] as { id: string }[]
+    expect(withArchived).toHaveLength(2)
   })
 })
 

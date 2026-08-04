@@ -71,7 +71,7 @@ await fetch('http://127.0.0.1:7444/api/memories/bulk', {
 })
 ```
 
-`op` is one of `pin`, `unpin`, `archive`, `unarchive`, `tag`, `merge`, `drop`,
+`op` is one of `pin`, `unpin`, `archive`, `unarchive`, `merge`, `drop`,
 `export`. Export streams back JSONL as a file download rather than JSON.
 
 Failures answer 400 or 404 with `{ error, kind }`, where `error` is written for

@@ -7,7 +7,6 @@ const DAY = 86_400_000
 export const FILTER_KEYS = [
   ['agent', 'written or read by an agent'],
   ['cluster', 'topic cluster'],
-  ['tag', 'applied tag'],
   ['type', 'chat or doc'],
   ['kind', 'claim or chunk'],
   ['strength', 'how much the store trusts it, e.g. strength:<40'],
@@ -28,7 +27,6 @@ export type ParsedQuery = {
   readonly terms: readonly string[]
   readonly agent: readonly string[]
   readonly cluster: readonly string[]
-  readonly tag: readonly string[]
   readonly type: readonly string[]
   readonly kind: readonly string[]
   readonly strength: StrengthBound | null
@@ -46,7 +44,6 @@ const EMPTY: ParsedQuery = {
   terms: [],
   agent: [],
   cluster: [],
-  tag: [],
   type: [],
   kind: [],
   strength: null,
@@ -93,7 +90,6 @@ export const parseQuery = (input: string, now: number): Result<ParsedQuery, Ledg
     terms: [] as string[],
     agent: [] as string[],
     cluster: [] as string[],
-    tag: [] as string[],
     type: [] as string[],
     kind: [] as string[],
     strength: null as StrengthBound | null,
@@ -119,7 +115,6 @@ export const parseQuery = (input: string, now: number): Result<ParsedQuery, Ledg
     switch (filter) {
       case 'agent':
       case 'cluster':
-      case 'tag':
       case 'type':
       case 'kind':
         draft[filter].push(value.toLowerCase())

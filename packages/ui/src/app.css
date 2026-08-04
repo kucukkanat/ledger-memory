@@ -852,23 +852,14 @@ input::placeholder {
   font-size: var(--lg-text-micro);
   color: var(--lg-text-faint);
 }
-.table__tags {
-  width: 150px;
+.table__flags {
+  width: 56px;
   flex: none;
   padding-left: 14px;
   display: flex;
   gap: var(--lg-space-1);
   align-items: center;
   overflow: hidden;
-}
-.tag {
-  font-family: var(--lg-font-mono);
-  font-size: 9.5px;
-  color: #7d848b;
-  background: #15181b;
-  padding: 1.5px 5px;
-  border-radius: var(--lg-radius-sm);
-  white-space: nowrap;
 }
 .table__foot {
   padding: 14px;
@@ -906,28 +897,6 @@ input::placeholder {
   text-underline-offset: 2px;
   background: none;
   border: none;
-}
-
-.tagbar {
-  flex: none;
-  padding: 10px 12px;
-  background: #111417;
-  border-bottom: 1px solid #262b30;
-  display: flex;
-  align-items: center;
-  gap: var(--lg-space-2);
-  flex-wrap: wrap;
-  animation: lg-slide-down 0.16s ease-out;
-}
-.tagbar__input {
-  font-family: var(--lg-font-mono);
-  font-size: 10.5px;
-  padding: 3px 8px;
-  background: var(--lg-surface);
-  border: 1px dashed #3a4046;
-  color: var(--lg-text);
-  width: 120px;
-  border-radius: var(--lg-radius-sm);
 }
 
 /* --------------------------------------------------------------- inspector */

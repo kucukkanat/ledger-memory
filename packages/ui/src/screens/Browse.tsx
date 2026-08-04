@@ -1,6 +1,7 @@
 import type { Memory, SearchHit } from '@ledger/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api, type FacetsResponse, type SearchResponse, type StatsResponse } from '../api.ts'
+import { api, type SearchResponse } from '../api.ts'
+import { type FilterControls, Filters } from '../components/Filters.tsx'
 import { Inspector } from '../components/Inspector.tsx'
 import { agentColor, ago, fmtN, initial, oneLine, strengthColor } from '../format.ts'
 import { useLoad } from '../hooks.ts'
@@ -8,17 +9,12 @@ import { useLoad } from '../hooks.ts'
 /**
  * Browse — everything in the store, filterable and operable in bulk.
  *
- * Facets here write into the query string rather than into separate state.
- * One source of truth means the URL-ish query in the search box always
- * describes exactly what the table is showing, and a filter clicked in the
- * sidebar is a filter you can then read, edit or copy.
+ * The filter rail is shared with the canvas: narrowing here is still narrowed
+ * there, because both are views of the same question rather than two apps.
  */
 
 export type BrowseProps = {
-  query: string
-  onQuery: (next: string) => void
-  facets: FacetsResponse | null
-  stats: StatsResponse | null
+  controls: FilterControls
   results: SearchResponse | null
   loading: boolean
   reload: () => void
@@ -27,37 +23,7 @@ export type BrowseProps = {
   sort: string
   dir: 'asc' | 'desc'
   onSort: (column: string) => void
-  kind: 'claim' | 'chunk' | 'all'
-  onKind: (kind: 'claim' | 'chunk' | 'all') => void
-  /**
-   * Flags the query language deliberately does not express.
-   *
-   * "Pinned", "in conflict", "not yet reviewed" and "archived" are properties
-   * of supervision, not of what a memory says — an agent has no business
-   * filtering on them, so they live as API parameters and as checkboxes here
-   * rather than as tokens in a DSL shared with agents.
-   */
-  flags: BrowseFlags
-  onFlag: (flag: keyof BrowseFlags) => void
 }
-
-export type BrowseFlags = {
-  pinned: boolean
-  conflicted: boolean
-  pending: boolean
-  archived: boolean
-}
-
-/** Add or remove a `key:value` token in the query string. */
-const toggleFilter = (query: string, key: string, value: string): string => {
-  const token = `${key}:${value}`
-  const parts = query.split(/\s+/).filter(Boolean)
-  const without = parts.filter((p) => p.toLowerCase() !== token.toLowerCase())
-  return (without.length === parts.length ? [...parts, token] : without).join(' ')
-}
-
-const hasFilter = (query: string, key: string, value: string): boolean =>
-  query.split(/\s+/).some((p) => p.toLowerCase() === `${key}:${value}`.toLowerCase())
 
 const BULK_OPS = [
   { op: 'pin', label: 'PIN', hint: 'hold at full strength, exempt from decay' },
@@ -66,7 +32,6 @@ const BULK_OPS = [
     label: 'MERGE',
     hint: 'fold into the first, summing evidence',
   },
-  { op: 'tag', label: 'TAG', hint: 'apply a tag to everything selected' },
   {
     op: 'archive',
     label: 'ARCHIVE',
@@ -77,10 +42,7 @@ const BULK_OPS = [
 ] as const
 
 export const Browse = ({
-  query,
-  onQuery,
-  facets,
-  stats,
+  controls,
   results,
   loading,
   reload,
@@ -89,16 +51,9 @@ export const Browse = ({
   sort,
   dir,
   onSort,
-  kind,
-  onKind,
-  flags,
-  onFlag,
 }: BrowseProps) => {
-  const [facetsOpen, setFacetsOpen] = useState(true)
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [focusId, setFocusId] = useState<string | null>(null)
-  const [tagOpen, setTagOpen] = useState(false)
-  const [newTag, setNewTag] = useState('')
 
   const rows = useMemo(() => results?.hits ?? [], [results])
   const detail = useLoad(
@@ -122,7 +77,7 @@ export const Browse = ({
   }, [])
 
   const runBulk = useCallback(
-    async (op: (typeof BULK_OPS)[number]['op'], tag?: string) => {
+    async (op: (typeof BULK_OPS)[number]['op']) => {
       const ids = [...selected]
       if (ids.length === 0) return
       try {
@@ -131,29 +86,21 @@ export const Browse = ({
           notify(`exported ${ids.length} → ledger-export.jsonl`)
           return
         }
-        if (op === 'tag' && !tag) {
-          setTagOpen((open) => !open)
-          return
-        }
         if (op === 'merge' && ids.length < 2) {
           notify('select at least two to merge', 'error')
           return
         }
-        await api.bulk(op, ids, tag)
+        await api.bulk(op, ids)
         notify(
           op === 'pin'
             ? `pinned ${ids.length} — protected from decay`
             : op === 'merge'
               ? `merged ${ids.length} → 1 · evidence summed`
-              : op === 'tag'
-                ? `tagged ${ids.length} as "${tag}"`
-                : op === 'drop'
-                  ? `dropped ${ids.length}`
-                  : `archived ${ids.length}`,
+              : op === 'drop'
+                ? `dropped ${ids.length}`
+                : `archived ${ids.length}`,
         )
         setSelected(new Set())
-        setTagOpen(false)
-        setNewTag('')
         reload()
       } catch (error) {
         onError(error)
@@ -162,204 +109,13 @@ export const Browse = ({
     [selected, notify, onError, reload],
   )
 
-  const facetGroups = useMemo(() => {
-    if (!facets || !stats) return []
-    const clusterLabels = new Map(stats.clusters.map((c) => [c.id, c.label]))
-    return [
-      {
-        label: 'TYPE',
-        key: 'type',
-        items: facets.origin.map((o) => ({
-          value: o.origin,
-          label: o.origin === 'doc' ? 'from a document' : 'said in conversation',
-          n: o.n,
-        })),
-      },
-      {
-        label: 'CLUSTER',
-        key: 'cluster',
-        items: facets.cluster
-          .map((c) => ({
-            value: c.cluster_id,
-            label: clusterLabels.get(c.cluster_id) ?? c.cluster_id,
-            n: c.n,
-          }))
-          .sort((a, b) => b.n - a.n),
-      },
-      {
-        label: 'AGENT',
-        key: 'agent',
-        items: facets.agent
-          .map((a) => ({ value: a.agent_id, label: a.agent_id, n: a.n }))
-          .sort((a, b) => b.n - a.n),
-      },
-      {
-        label: 'TAG',
-        key: 'tag',
-        items: facets.tag.slice(0, 12).map((t) => ({ value: t.tag, label: t.tag, n: t.n })),
-      },
-    ]
-  }, [facets, stats])
-
-  const activeFacets = query.split(/\s+/).filter((p) => p.includes(':')).length
   const allChecked = rows.length > 0 && rows.every((r) => selected.has(r.id))
 
   const mark = (column: string): string => (sort === column ? (dir === 'desc' ? '↓' : '↑') : '')
 
   return (
     <div className="screen" style={{ flexDirection: 'row' }}>
-      {facetsOpen ? (
-        <div className="facets">
-          <div className="facets__head">
-            <button
-              type="button"
-              className="facets__toggle"
-              onClick={() => setFacetsOpen(false)}
-              title="hide filters"
-            >
-              «
-            </button>
-            <span className="eyebrow" style={{ flex: 1 }}>
-              FILTERS
-            </span>
-            <button
-              type="button"
-              className="selbar__link"
-              onClick={() =>
-                onQuery(
-                  query
-                    .split(/\s+/)
-                    .filter((p) => !p.includes(':'))
-                    .join(' '),
-                )
-              }
-            >
-              RESET
-            </button>
-          </div>
-
-          <div className="facets__group eyebrow">KIND</div>
-          {(
-            [
-              ['all', 'everything'],
-              ['claim', 'claims only'],
-              ['chunk', 'document chunks'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              type="button"
-              key={value}
-              className={`facets__item${kind === value ? ' facets__item--on' : ''}`}
-              onClick={() => onKind(value)}
-            >
-              <span
-                className="facets__mark"
-                style={{
-                  borderRadius: '50%',
-                  borderColor: kind === value ? 'var(--lg-accent)' : 'var(--lg-text-ghost)',
-                  background: kind === value ? 'var(--lg-accent)' : 'transparent',
-                }}
-              />
-              <span className="facets__label">{label}</span>
-              <span className="facets__n">
-                {value === 'claim'
-                  ? fmtN(stats?.claims ?? 0)
-                  : value === 'chunk'
-                    ? fmtN(stats?.chunks ?? 0)
-                    : fmtN(stats?.memories ?? 0)}
-              </span>
-            </button>
-          ))}
-
-          {facetGroups.map((group) => (
-            <div key={group.key}>
-              <div className="facets__group eyebrow">{group.label}</div>
-              {group.items.map((item) => {
-                const on = hasFilter(query, group.key, item.value)
-                return (
-                  <button
-                    type="button"
-                    key={item.value}
-                    className={`facets__item${on ? ' facets__item--on' : ''}`}
-                    onClick={() => onQuery(toggleFilter(query, group.key, item.value))}
-                  >
-                    <span
-                      className="facets__mark"
-                      style={{
-                        borderColor: on ? 'var(--lg-accent)' : 'var(--lg-text-ghost)',
-                        background: on ? 'var(--lg-accent)' : 'transparent',
-                      }}
-                    />
-                    <span className="facets__label" style={on ? { color: 'var(--lg-text)' } : {}}>
-                      {item.label}
-                    </span>
-                    <span className="facets__n">{fmtN(item.n)}</span>
-                  </button>
-                )
-              })}
-            </div>
-          ))}
-
-          <div className="facets__group eyebrow">FLAGS</div>
-          {(
-            [
-              ['pinned', 'pinned', facets?.flags.pinned ?? 0],
-              ['conflicted', 'in conflict', facets?.flags.conflicted ?? 0],
-              ['pending', 'not yet reviewed', facets?.flags.pending ?? 0],
-              ['archived', 'archived', facets?.flags.archived ?? 0],
-            ] as const
-          ).map(([flag, label, n]) => (
-            <button
-              type="button"
-              key={flag}
-              className={`facets__item${flags[flag] ? ' facets__item--on' : ''}`}
-              onClick={() => onFlag(flag)}
-            >
-              <span
-                className="facets__mark"
-                style={{
-                  borderRadius: 0,
-                  borderColor: flags[flag] ? 'var(--lg-accent)' : 'var(--lg-text-ghost)',
-                  background: flags[flag] ? 'var(--lg-accent)' : 'transparent',
-                }}
-              />
-              <span
-                className="facets__label"
-                style={flags[flag] ? { color: 'var(--lg-text)' } : {}}
-              >
-                {label}
-              </span>
-              <span className="facets__n">{fmtN(n)}</span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <button
-          type="button"
-          className="facets facets--collapsed"
-          onClick={() => setFacetsOpen(true)}
-          title="show filters"
-        >
-          <span className="facets__toggle">»</span>
-          <span className="eyebrow" style={{ writingMode: 'vertical-rl' }}>
-            FILTERS
-          </span>
-          {activeFacets > 0 && (
-            <span
-              className="mono"
-              style={{
-                fontSize: 9,
-                color: 'var(--lg-bg)',
-                background: 'var(--lg-accent)',
-                padding: '1px 4px',
-                borderRadius: 2,
-              }}
-            >
-              {activeFacets}
-            </span>
-          )}
-        </button>
-      )}
+      <Filters controls={controls} />
 
       <div
         style={{
@@ -404,31 +160,6 @@ export const Browse = ({
           </div>
         )}
 
-        {tagOpen && (
-          <div className="tagbar">
-            <span className="eyebrow">APPLY TAG</span>
-            {(facets?.tags ?? []).slice(0, 14).map((tag) => (
-              <button
-                type="button"
-                key={tag}
-                className="btn"
-                onClick={() => void runBulk('tag', tag)}
-              >
-                {tag}
-              </button>
-            ))}
-            <input
-              className="tagbar__input"
-              value={newTag}
-              placeholder="new tag ⏎"
-              onChange={(e) => setNewTag(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && newTag.trim()) void runBulk('tag', newTag.trim())
-              }}
-            />
-          </div>
-        )}
-
         <div className="table">
           <div className="table__head">
             <button
@@ -461,7 +192,7 @@ export const Browse = ({
                 SEEN {mark('last')}
               </button>
             </div>
-            <div className="table__tags">TAGS</div>
+            <div className="table__flags">FLAGS</div>
           </div>
 
           {rows.map((row: SearchHit) => (
@@ -571,12 +302,7 @@ export const Browse = ({
               <div className="table__num" style={{ width: 64 }}>
                 {ago(row.lastReadAt)}
               </div>
-              <div className="table__tags">
-                {row.tags.slice(0, 2).map((tag) => (
-                  <span className="tag" key={tag}>
-                    {tag}
-                  </span>
-                ))}
+              <div className="table__flags">
                 {row.pinned && (
                   <span className="accent" title="pinned" style={{ fontSize: 10 }}>
                     ◆

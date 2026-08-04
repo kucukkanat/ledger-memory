@@ -1,16 +1,18 @@
 import type { SearchMode } from '@ledger/core'
 import { useCallback, useMemo, useState } from 'react'
+import { HashRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { api } from './api.ts'
+import type { FilterControls } from './components/Filters.tsx'
 import { SearchBox } from './components/SearchBox.tsx'
+import type { FilterFlags, MemoryKind } from './filters.ts'
 import { bytes, duration, fmtN } from './format.ts'
 import { useDebounced, useLoad, useToast } from './hooks.ts'
-import { Browse, type BrowseFlags } from './screens/Browse.tsx'
+import { DEFAULT_SCREEN, pathOf, type Screen, screenOf } from './routes.ts'
+import { Browse } from './screens/Browse.tsx'
 import { Canvas } from './screens/Canvas.tsx'
 import { Connections } from './screens/Connections.tsx'
 import { Review } from './screens/Review.tsx'
 import { Sources } from './screens/Sources.tsx'
-
-type Screen = 'review' | 'browse' | 'sources' | 'canvas' | 'connections'
 
 const MODES: readonly SearchMode[] = ['hybrid', 'keyword', 'fuzzy']
 
@@ -112,22 +114,43 @@ const FirstRun = ({ endpoint }: { endpoint: string }) => {
   )
 }
 
-export const App = () => {
+const Loading = () => (
+  <div className="screen" style={{ alignItems: 'center', justifyContent: 'center' }}>
+    <span className="mono dim" style={{ fontSize: 11, letterSpacing: '0.14em' }}>
+      LOADING…
+    </span>
+  </div>
+)
+
+const Shell = () => {
   const { toast, show, report } = useToast()
 
-  const [screen, setScreen] = useState<Screen>('review')
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  // The URL is the single source of truth for which view is open — a reload
+  // re-derives it instead of dropping the reader back on the default screen.
+  const screen = screenOf(pathname)
+
   const [query, setQuery] = useState('')
   const [mode, setMode] = useState<SearchMode>('hybrid')
-  const [kind, setKind] = useState<'claim' | 'chunk' | 'all'>('all')
   const [sort, setSort] = useState('strength')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
-  const [flags, setFlags] = useState<BrowseFlags>({
+  const [flags, setFlags] = useState<FilterFlags>({
     pinned: false,
     conflicted: false,
     pending: false,
     archived: false,
   })
-  const [showChunks, setShowChunks] = useState(false)
+  /**
+   * Kind is per-screen where everything else in the rail is shared.
+   *
+   * The table can afford to list chunks — they sort and scroll like anything
+   * else. The canvas cannot: chunks outnumber claims several to one and bury
+   * the shape of what the fleet actually knows, so it opens on claims and lets
+   * you ask for the rest.
+   */
+  const [browseKind, setBrowseKind] = useState<MemoryKind>('all')
+  const [canvasKind, setCanvasKind] = useState<MemoryKind>('claim')
   /** Bumped after any mutation so every dependent panel refetches together. */
   const [revision, setRevision] = useState(0)
   const bump = useCallback(() => setRevision((r) => r + 1), [])
@@ -143,14 +166,14 @@ export const App = () => {
       screen === 'browse'
         ? api.search({
             q: debouncedQuery,
-            kind,
+            kind: browseKind,
             sort,
             dir,
             limit: 300,
             ...flags,
           })
         : Promise.resolve(null),
-    [screen, debouncedQuery, kind, sort, dir, flags, revision],
+    [screen, debouncedQuery, browseKind, sort, dir, flags, revision],
     report,
   )
 
@@ -175,13 +198,30 @@ export const App = () => {
   const graph = useLoad(
     () =>
       screen === 'canvas'
-        ? api.graph({ q: debouncedQuery, chunks: showChunks })
+        ? api.graph({ q: debouncedQuery, kind: canvasKind, ...flags })
         : Promise.resolve(null),
-    [screen, debouncedQuery, showChunks, revision],
+    [screen, debouncedQuery, canvasKind, flags, revision],
     report,
   )
 
   const endpoint = useMemo(() => window.location.origin, [])
+
+  const onFlag = useCallback(
+    (flag: keyof FilterFlags) => setFlags((current) => ({ ...current, [flag]: !current[flag] })),
+    [],
+  )
+
+  const filters = useMemo(
+    (): Omit<FilterControls, 'kind' | 'onKind'> => ({
+      query,
+      onQuery: setQuery,
+      facets: facets.data,
+      stats: stats.data,
+      flags,
+      onFlag,
+    }),
+    [query, facets.data, stats.data, flags, onFlag],
+  )
 
   const onSort = useCallback(
     (column: string) => {
@@ -196,11 +236,11 @@ export const App = () => {
 
   const openMemory = useCallback(
     (id: string) => {
-      setScreen('browse')
+      navigate(pathOf('browse'))
       setQuery(id)
       show('opened in Browse')
     },
-    [show],
+    [navigate, show],
   )
 
   const pendingCount = review.data ? review.data.claims.length + review.data.conflicts.length : 0
@@ -231,7 +271,7 @@ export const App = () => {
             value={query}
             onChange={(next) => {
               setQuery(next)
-              if (screen !== 'browse' && screen !== 'canvas') setScreen('browse')
+              if (screen !== 'browse' && screen !== 'canvas') navigate(pathOf('browse'))
             }}
             mode={mode}
             onMode={() =>
@@ -274,11 +314,10 @@ export const App = () => {
         <nav className="sidebar">
           <div className="sidebar__section eyebrow">MEMORY</div>
           {nav.map(([id, label, count]) => (
-            <button
-              type="button"
+            <Link
               key={id}
+              to={pathOf(id)}
               className={`sidebar__item${screen === id ? ' sidebar__item--active' : ''}`}
-              onClick={() => setScreen(id)}
             >
               <span>{label}</span>
               <span
@@ -288,18 +327,17 @@ export const App = () => {
               >
                 {count}
               </span>
-            </button>
+            </Link>
           ))}
 
           <div className="sidebar__section eyebrow">FLEET</div>
-          <button
-            type="button"
+          <Link
+            to={pathOf('connections')}
             className={`sidebar__item${screen === 'connections' ? ' sidebar__item--active' : ''}`}
-            onClick={() => setScreen('connections')}
           >
             <span>Connections</span>
             <span className="sidebar__count">{fmtN(stats.data?.agents ?? 0)}</span>
-          </button>
+          </Link>
 
           <div style={{ flex: 1 }} />
 
@@ -344,62 +382,92 @@ export const App = () => {
 
         {empty ? (
           <FirstRun endpoint={endpoint} />
-        ) : screen === 'review' && review.data ? (
-          <Review
-            data={review.data}
-            reload={bump}
-            notify={show}
-            onError={report}
-            clearedCount={(stats.data?.claims ?? 0) - review.data.claims.length}
-          />
-        ) : screen === 'browse' ? (
-          <Browse
-            query={query}
-            onQuery={setQuery}
-            facets={facets.data}
-            stats={stats.data}
-            results={search.data}
-            loading={search.loading}
-            reload={bump}
-            notify={show}
-            onError={report}
-            sort={sort}
-            dir={dir}
-            onSort={onSort}
-            kind={kind}
-            onKind={setKind}
-            flags={flags}
-            onFlag={(flag) => setFlags((current) => ({ ...current, [flag]: !current[flag] }))}
-          />
-        ) : screen === 'sources' && sources.data ? (
-          <Sources
-            sources={sources.data}
-            reload={bump}
-            notify={show}
-            onError={report}
-            onOpenMemory={openMemory}
-          />
-        ) : screen === 'canvas' && graph.data ? (
-          <Canvas
-            graph={graph.data}
-            showChunks={showChunks}
-            onShowChunks={setShowChunks}
-            onOpenMemory={openMemory}
-          />
-        ) : screen === 'connections' && agents.data && stats.data ? (
-          <Connections
-            stats={stats.data}
-            agents={agents.data}
-            log={log.data ?? []}
-            endpoint={endpoint}
-            notify={show}
-          />
         ) : (
-          <div className="screen" style={{ alignItems: 'center', justifyContent: 'center' }}>
-            <span className="mono dim" style={{ fontSize: 11, letterSpacing: '0.14em' }}>
-              LOADING…
-            </span>
-          </div>
+          <Routes>
+            <Route
+              path={pathOf('review')}
+              element={
+                review.data ? (
+                  <Review
+                    data={review.data}
+                    reload={bump}
+                    notify={show}
+                    onError={report}
+                    clearedCount={(stats.data?.claims ?? 0) - review.data.claims.length}
+                  />
+                ) : (
+                  <Loading />
+                )
+              }
+            />
+            <Route
+              path={pathOf('browse')}
+              element={
+                <Browse
+                  controls={{ ...filters, kind: browseKind, onKind: setBrowseKind }}
+                  results={search.data}
+                  loading={search.loading}
+                  reload={bump}
+                  notify={show}
+                  onError={report}
+                  sort={sort}
+                  dir={dir}
+                  onSort={onSort}
+                />
+              }
+            />
+            <Route
+              path={pathOf('sources')}
+              element={
+                sources.data ? (
+                  <Sources
+                    sources={sources.data}
+                    reload={bump}
+                    notify={show}
+                    onError={report}
+                    onOpenMemory={openMemory}
+                  />
+                ) : (
+                  <Loading />
+                )
+              }
+            />
+            <Route
+              path={pathOf('canvas')}
+              element={
+                graph.data ? (
+                  <Canvas
+                    graph={graph.data}
+                    controls={{ ...filters, kind: canvasKind, onKind: setCanvasKind }}
+                    reload={bump}
+                    notify={show}
+                    onError={report}
+                  />
+                ) : (
+                  <Loading />
+                )
+              }
+            />
+            <Route
+              path={pathOf('connections')}
+              element={
+                agents.data && stats.data ? (
+                  <Connections
+                    stats={stats.data}
+                    agents={agents.data}
+                    log={log.data ?? []}
+                    endpoint={endpoint}
+                    notify={show}
+                  />
+                ) : (
+                  <Loading />
+                )
+              }
+            />
+            {/* Bare `#/`, a stale bookmark, or a typo — rewritten, not a blank
+                screen. `replace` keeps it out of the back button. */}
+            <Route path="*" element={<Navigate to={pathOf(DEFAULT_SCREEN)} replace />} />
+          </Routes>
         )}
       </div>
 
@@ -411,3 +479,13 @@ export const App = () => {
     </div>
   )
 }
+
+/**
+ * The router lives inside `App` rather than at the mount point, so embedding
+ * `<App />` is still the whole contract — see `routes.ts` for why it hashes.
+ */
+export const App = () => (
+  <HashRouter>
+    <Shell />
+  </HashRouter>
+)

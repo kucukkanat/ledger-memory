@@ -22,7 +22,6 @@ const renderClaim = (m: Memory, now: number): void => {
   )
   write(`  ${bold(m.text)}`)
   if (m.provenance) write(`  ${dim(m.provenance)}`)
-  if (m.tags.length > 0) write(`  ${dim(m.tags.map((t) => `#${t}`).join(' '))}`)
 }
 
 const renderConflict = (c: Conflict, now: number): void => {

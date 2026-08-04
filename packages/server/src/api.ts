@@ -73,7 +73,7 @@ export const createApi = (store: Store) => {
 
   api.get('/events', (c) => c.json(store.events(Number(c.req.query('limit') ?? 20))))
 
-  api.get('/facets', (c) => c.json({ ...store.memories.facets(), tags: store.memories.tags() }))
+  api.get('/facets', (c) => c.json(store.memories.facets()))
 
   api.get('/timeline', (c) => c.json(store.timeline(Number(c.req.query('buckets') ?? 60))))
 
@@ -111,7 +111,6 @@ export const createApi = (store: Store) => {
     const patch = (await c.req.json()) as {
       text?: string
       cluster?: string
-      tags?: string[]
       by?: string
     }
     const { body, code } = send(
@@ -120,7 +119,6 @@ export const createApi = (store: Store) => {
         {
           ...(patch.text !== undefined ? { text: patch.text } : {}),
           ...(patch.cluster !== undefined ? { cluster: patch.cluster } : {}),
-          ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
         },
         patch.by ?? 'human',
       ),
@@ -131,9 +129,8 @@ export const createApi = (store: Store) => {
   /** Bulk operations from the Browse selection bar. */
   api.post('/memories/bulk', async (c) => {
     const body = (await c.req.json()) as {
-      op: 'pin' | 'unpin' | 'archive' | 'unarchive' | 'tag' | 'merge' | 'drop' | 'export'
+      op: 'pin' | 'unpin' | 'archive' | 'unarchive' | 'merge' | 'drop' | 'export'
       ids: string[]
-      tag?: string
       by?: string
     }
     const by = body.by ?? 'human'
@@ -151,10 +148,6 @@ export const createApi = (store: Store) => {
         return c.json({
           affected: store.memories.archive(ids, body.op === 'archive', by),
         })
-      case 'tag': {
-        if (!body.tag) return c.json({ error: 'tag is required' }, 400)
-        return c.json({ affected: store.memories.tag(ids, body.tag, by) })
-      }
       case 'drop':
         return c.json({ affected: store.memories.remove(ids, by) })
       case 'merge': {
@@ -250,11 +243,20 @@ export const createApi = (store: Store) => {
 
   /** Everything the canvas needs to draw, in one call. */
   api.get('/graph', (c) => {
+    const q = c.req.query()
     const found = store.memories.search({
-      query: c.req.query('q') ?? '',
-      limit: Number(c.req.query('limit') ?? 4000),
+      query: q['q'] ?? '',
+      limit: Number(q['limit'] ?? 4000),
       countRead: false,
-      ...(c.req.query('chunks') === '1' ? {} : { kind: 'claim' as const }),
+      // Claims unless asked otherwise — chunks outnumber them several to one
+      // and bury the shape of what the fleet knows.
+      kind: (q['kind'] as 'claim' | 'chunk' | 'all' | undefined) ?? 'claim',
+      // The same supervision filters the table takes, so the two screens can
+      // share one filter rail and mean the same thing by it.
+      ...(q['archived'] === '1' ? { includeArchived: true } : {}),
+      ...(q['pending'] === '1' ? { pendingOnly: true } : {}),
+      ...(q['pinned'] === '1' ? { pinnedOnly: true } : {}),
+      ...(q['conflicted'] === '1' ? { conflictedOnly: true } : {}),
     })
     if (found.isErr()) return c.json({ error: explain(found.error) }, status(found.error))
 

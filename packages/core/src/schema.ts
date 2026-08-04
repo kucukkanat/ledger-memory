@@ -1,6 +1,6 @@
 import { clusterColor } from '@ledger/tokens'
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 /**
  * The store's shape.
@@ -16,6 +16,11 @@ export const SCHEMA_VERSION = 1
  *    number drift away from the evidence that justifies it.
  */
 export const DDL = `
+-- v2 removed tags. Clusters already carry the taxonomy, and a second freeform
+-- one only ever disagreed with the first. Dropped rather than left orphaned so
+-- an old store does not carry a table nothing reads.
+DROP TABLE IF EXISTS memory_tags;
+
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -83,13 +88,6 @@ CREATE TABLE IF NOT EXISTS memory_readers (
   PRIMARY KEY (memory_id, agent_id)
 );
 CREATE INDEX IF NOT EXISTS memory_readers_agent ON memory_readers (agent_id);
-
-CREATE TABLE IF NOT EXISTS memory_tags (
-  memory_id TEXT NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
-  tag       TEXT NOT NULL,
-  PRIMARY KEY (memory_id, tag)
-);
-CREATE INDEX IF NOT EXISTS memory_tags_tag ON memory_tags (tag);
 
 CREATE TABLE IF NOT EXISTS links (
   a TEXT NOT NULL REFERENCES memories(id) ON DELETE CASCADE,

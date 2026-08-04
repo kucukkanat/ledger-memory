@@ -27,7 +27,6 @@ export type WriteInput = {
     readonly cluster: string;
     readonly agent: string;
     readonly origin?: MemoryOrigin;
-    readonly tags?: readonly string[];
     readonly provenance?: string;
     readonly sourceId?: string | null;
     /** Explicitly declare that this replaces an existing claim. */
@@ -142,19 +141,17 @@ export declare const openStore: (options: StoreOptions) => {
         update: (id: string, patch: {
             text?: string;
             cluster?: string;
-            tags?: readonly string[];
             provenance?: string;
         }, agent: string) => Result<Memory, LedgerFailure>;
         pin: (ids: readonly string[], pinned: boolean, agent: string) => number;
         archive: (ids: readonly string[], archived: boolean, agent: string) => number;
-        tag: (ids: readonly string[], tag: string, agent: string) => number;
         remove: (ids: readonly string[], agent: string) => number;
         /**
          * Fold several memories into the first.
          *
-         * Hits are summed and readers/tags unioned because the merged memory
-         * genuinely carries all that evidence — losing it would understate the
-         * strength of the thing that survives.
+         * Hits are summed and readers unioned because the merged memory genuinely
+         * carries all that evidence — losing it would understate the strength of
+         * the thing that survives.
          */
         merge: (ids: readonly string[], agent: string) => Result<Memory, LedgerFailure>;
         link: (a: string, b: string, agent: string) => Result<void, LedgerFailure>;
@@ -175,10 +172,6 @@ export declare const openStore: (options: StoreOptions) => {
                 agent_id: string;
                 n: number;
             }[];
-            tag: {
-                tag: string;
-                n: number;
-            }[];
             flags: {
                 pinned: number;
                 archived: number;
@@ -186,7 +179,6 @@ export declare const openStore: (options: StoreOptions) => {
                 pending: number;
             };
         };
-        tags: () => string[];
     };
     review: {
         /**
@@ -234,8 +226,10 @@ export declare const openStore: (options: StoreOptions) => {
          * Drop a source and everything that came out of it.
          *
          * Chunks go — they have no meaning without the document. Claims distilled
-         * from it survive but are flagged, because an agent already judged them
-         * worth keeping and they may be corroborated elsewhere.
+         * from it survive, because an agent already judged them worth keeping and
+         * they may be corroborated elsewhere. They do go back into the review
+         * queue: the evidence behind them just disappeared, so the judgement that
+         * kept them deserves to be made again.
          */
         drop: (id: string, agent: string) => Result<{
             chunks: number;

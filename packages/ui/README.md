@@ -22,6 +22,11 @@ claims are already searchable, so an unworked queue never blocks an agent.
 into the query string rather than into separate state, so the search box always
 describes exactly what the table is showing and you can read, edit or copy it.
 
+The filter rail is shared with Canvas: narrowing on one screen is still narrowed
+on the other, because they are two views of the same question. Only *kind* is
+per-screen — the table can afford to list document chunks, the canvas opens on
+claims because chunks outnumber them several to one.
+
 **Sources** — the documents behind the chunks, with a trust slider that moves
 every chunk at once. Expanding a source shows its first chunks and the claims
 agents distilled from it.
@@ -32,8 +37,30 @@ it is the same set rearranged. `clusters` (what is known, by topic), `graph`
 `heat` (retrieval against strength — top right is load-bearing, bottom left is
 dead weight). The scrubber replays the store's history; ⏵ plays it.
 
+Scroll to zoom, drag to pan, double-click or FIT to frame everything again. The
+view auto-fits whatever survives the filters, and your zoom composes on top of
+that fit — so narrowing still reframes without discarding where you had
+navigated to.
+
 **Connections** — which agents are attached, what they read and write, what they
 have in common, and a live request feed.
+
+## Routes
+
+Each screen has its own hash route — `#/review`, `#/browse`, `#/sources`,
+`#/canvas`, `#/connections` — so a reload reopens the screen you were on and a
+link opens it for someone else.
+
+Hash routing rather than paths because the same bundle is served by
+`@ledger/server`, opened straight off disk, and published to GitHub Pages, and
+only the first of those can be asked to rewrite unknown paths back to
+`index.html`. Nothing after `#` ever reaches a server, so `#/canvas` survives a
+refresh anywhere.
+
+An empty or unrecognised hash rewrites to `#/review` rather than rendering
+nothing. What stays out of the URL is deliberate: the search query, sort,
+filters and canvas layout live in memory, because the route names the screen,
+not the state of its controls.
 
 ## Conventions
 
@@ -54,4 +81,5 @@ import { App } from '@ledger/ui'
 import '@ledger/ui/app.css'
 ```
 
-The app assumes a LEDGER API at `/api` on the same origin.
+The app assumes a LEDGER API at `/api` on the same origin, and mounts its own
+`HashRouter` — it owns the fragment of whatever page it is embedded in.

@@ -57,14 +57,12 @@ export type FacetsResponse = {
   origin: { origin: string; n: number }[]
   cluster: { cluster_id: string; n: number }[]
   agent: { agent_id: string; n: number }[]
-  tag: { tag: string; n: number }[]
   flags: {
     pinned: number
     archived: number
     conflicted: number
     pending: number
   }
-  tags: string[]
 }
 
 export type ReviewResponse = {
@@ -139,7 +137,9 @@ const query = (params: SearchParams): string => {
   if (params.q) search.set('q', params.q)
   if (params.limit !== undefined) search.set('limit', String(params.limit))
   if (params.offset) search.set('offset', String(params.offset))
-  if (params.kind && params.kind !== 'all') search.set('kind', params.kind)
+  // Sent even when it is "all": the canvas defaults to claims when no kind is
+  // given, so omitting it would silently mean the opposite of what was asked.
+  if (params.kind) search.set('kind', params.kind)
   if (params.sort) search.set('sort', params.sort)
   if (params.dir) search.set('dir', params.dir)
   if (params.archived) search.set('archived', '1')
@@ -158,16 +158,16 @@ export const api = {
 
   search: (params: SearchParams) => request<SearchResponse>(`/search?${query(params)}`),
   memory: (id: string) => request<{ memory: Memory; related: Memory[] }>(`/memories/${id}`),
-  updateMemory: (id: string, patch: { text?: string; cluster?: string; tags?: string[] }) =>
+  updateMemory: (id: string, patch: { text?: string; cluster?: string }) =>
     request<Memory>(`/memories/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),
     }),
 
-  bulk: (op: string, ids: string[], tag?: string) =>
+  bulk: (op: string, ids: string[]) =>
     request<{ affected: number }>('/memories/bulk', {
       method: 'POST',
-      body: JSON.stringify({ op, ids, ...(tag ? { tag } : {}) }),
+      body: JSON.stringify({ op, ids }),
     }),
 
   /** Export bypasses the JSON client — the response is a file, not a payload. */
@@ -211,13 +211,8 @@ export const api = {
       method: 'DELETE',
     }),
 
-  graph: (params: { q?: string; chunks?: boolean; limit?: number }) => {
-    const search = new URLSearchParams()
-    if (params.q) search.set('q', params.q)
-    if (params.chunks) search.set('chunks', '1')
-    if (params.limit) search.set('limit', String(params.limit))
-    return request<GraphResponse>(`/graph?${search.toString()}`)
-  },
+  /** The canvas draws whatever the filter rail is asking for, same as the table. */
+  graph: (params: SearchParams) => request<GraphResponse>(`/graph?${query(params)}`),
 
   createCluster: (label: string) =>
     request<Cluster>('/clusters', {

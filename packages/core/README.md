@@ -34,7 +34,6 @@ const written = store.memories.write({
   text: 'opal requires Node 22 — 20 breaks the wasm loader',
   cluster: 'code',
   agent: 'forge',
-  tags: ['opal', 'build'],
   provenance: 'confirmed by follow-up question',
 })
 

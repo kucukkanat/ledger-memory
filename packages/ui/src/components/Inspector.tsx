@@ -160,21 +160,6 @@ export const Inspector = ({ memory, related, onClose, onPin, onDrop, onOpen }: I
           ))}
         </div>
 
-        {memory.tags.length > 0 && (
-          <>
-            <div className="eyebrow" style={{ margin: '18px 0 6px' }}>
-              Tags
-            </div>
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {memory.tags.map((tag) => (
-                <span className="tag" key={tag}>
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </>
-        )}
-
         {related.length > 0 && (
           <>
             <div className="eyebrow" style={{ margin: '18px 0 6px' }}>

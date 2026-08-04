@@ -27,12 +27,12 @@ wrongly — silently, and unrecoverably.
 ledger clusters                      # learn the taxonomy before the first write
 
 ledger remember "opal requires Node 22 — 20 breaks the wasm loader" \
-  --cluster code --tags opal,build --note "confirmed by follow-up question"
+  --cluster code --note "confirmed by follow-up question"
 # remembered m_msefw27xjzi7rd
 
 ledger recall "node wasm loader"
 # 1 memory
-# m_msefw27xjzi7rd   51  opal requires Node 22 — 20 breaks the wasm loader  [code, build, opal]
+# m_msefw27xjzi7rd   51  opal requires Node 22 — 20 breaks the wasm loader  [code]
 ```
 
 Output is deliberately compact: full id (needed verbatim for `link` and

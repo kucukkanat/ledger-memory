@@ -730,7 +730,6 @@ var DAY = 86400000;
 var FILTER_KEYS = [
   ["agent", "written or read by an agent"],
   ["cluster", "topic cluster"],
-  ["tag", "applied tag"],
   ["type", "chat or doc"],
   ["kind", "claim or chunk"],
   ["strength", "how much the store trusts it, e.g. strength:<40"],
@@ -743,7 +742,6 @@ var EMPTY = {
   terms: [],
   agent: [],
   cluster: [],
-  tag: [],
   type: [],
   kind: [],
   strength: null,
@@ -780,7 +778,6 @@ var parseQuery = (input, now) => {
     terms: [],
     agent: [],
     cluster: [],
-    tag: [],
     type: [],
     kind: [],
     strength: null,
@@ -804,7 +801,6 @@ var parseQuery = (input, now) => {
     switch (filter) {
       case "agent":
       case "cluster":
-      case "tag":
       case "type":
       case "kind":
         draft[filter].push(value.toLowerCase());
@@ -876,7 +872,6 @@ SELECT
   c.color AS cluster_color,
   s.trust AS source_trust,
   (SELECT group_concat(agent_id, ',') FROM memory_readers r WHERE r.memory_id = m.id) AS readers,
-  (SELECT group_concat(tag, ',')      FROM memory_tags    t WHERE t.memory_id = m.id) AS tags,
   (SELECT CASE WHEN cf.a = m.id THEN cf.b ELSE cf.a END
      FROM conflicts cf
     WHERE cf.status = 'open' AND (cf.a = m.id OR cf.b = m.id)
@@ -906,7 +901,6 @@ var hydrate = (row, now) => {
     clusterColor: row.cluster_color,
     writer: row.writer,
     readers,
-    tags: split(row.tags),
     sourceId: row.source_id,
     chunkIndex: row.chunk_index,
     provenance: row.provenance,
@@ -925,8 +919,13 @@ var hydrate = (row, now) => {
 };
 
 // packages/core/src/schema.ts
-var SCHEMA_VERSION = 1;
+var SCHEMA_VERSION = 2;
 var DDL = `
+-- v2 removed tags. Clusters already carry the taxonomy, and a second freeform
+-- one only ever disagreed with the first. Dropped rather than left orphaned so
+-- an old store does not carry a table nothing reads.
+DROP TABLE IF EXISTS memory_tags;
+
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -994,13 +993,6 @@ CREATE TABLE IF NOT EXISTS memory_readers (
   PRIMARY KEY (memory_id, agent_id)
 );
 CREATE INDEX IF NOT EXISTS memory_readers_agent ON memory_readers (agent_id);
-
-CREATE TABLE IF NOT EXISTS memory_tags (
-  memory_id TEXT NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
-  tag       TEXT NOT NULL,
-  PRIMARY KEY (memory_id, tag)
-);
-CREATE INDEX IF NOT EXISTS memory_tags_tag ON memory_tags (tag);
 
 CREATE TABLE IF NOT EXISTS links (
   a TEXT NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
@@ -1147,14 +1139,6 @@ var openStore = (options) => {
     const color2 = clusterPalette[count.n % clusterPalette.length] ?? "#868d95";
     db.query(`INSERT INTO agents (id, label, role, color, endpoint, first_seen, last_seen)
        VALUES (?, ?, '', ?, '', ?, ?)`).run(id, id, color2, at, at);
-  };
-  const setTags = (memoryId, tags) => {
-    const insert = db.query("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)");
-    for (const tag of tags) {
-      const clean = tag.trim().toLowerCase();
-      if (clean)
-        insert.run(memoryId, clean);
-    }
   };
   const addReader = (memoryId, agentId) => {
     db.query("INSERT OR IGNORE INTO memory_readers (memory_id, agent_id) VALUES (?, ?)").run(memoryId, agentId);
@@ -1323,7 +1307,6 @@ var openStore = (options) => {
               created_at, last_read_at, hits, source_count, pinned, archived, reviewed_at, deleted_at)
            VALUES (?, ?, 'claim', ?, ?, ?, ?, NULL, ?, ?, ?, 0, 1, 0, 0, NULL, NULL)`).run(id, text, origin, cluster.value, input.agent, input.sourceId ?? null, input.provenance ?? "", at, at);
         addReader(id, input.agent);
-        setTags(id, input.tags ?? []);
         indexText(id, text);
       });
       insert();
@@ -1410,10 +1393,6 @@ var openStore = (options) => {
       if (q.agent.length > 0) {
         where.push(`EXISTS (SELECT 1 FROM memory_readers r WHERE r.memory_id = m.id AND r.agent_id IN (${q.agent.map(() => "?").join(",")}))`);
         params.push(...q.agent);
-      }
-      if (q.tag.length > 0) {
-        where.push(`EXISTS (SELECT 1 FROM memory_tags t WHERE t.memory_id = m.id AND t.tag IN (${q.tag.map(() => "?").join(",")}))`);
-        params.push(...q.tag);
       }
       if (q.before !== null) {
         where.push("m.created_at < ?");
@@ -1514,10 +1493,6 @@ var openStore = (options) => {
         if (patch.provenance !== undefined) {
           db.query("UPDATE memories SET provenance = ? WHERE id = ?").run(patch.provenance, id);
         }
-        if (patch.tags !== undefined) {
-          db.query("DELETE FROM memory_tags WHERE memory_id = ?").run(id);
-          setTags(id, patch.tags);
-        }
       });
       apply();
       record(agent, "memory.update", id, patch.text ?? existing.value.text);
@@ -1542,18 +1517,6 @@ var openStore = (options) => {
       });
       apply();
       record(agent, archived ? "memory.archive" : "memory.unarchive", null, `${ids.length} memories`);
-      return ids.length;
-    },
-    tag: (ids, tag, agent) => {
-      const clean = tag.trim().toLowerCase();
-      if (!clean)
-        return 0;
-      const apply = db.transaction(() => {
-        for (const id of ids)
-          setTags(id, [clean]);
-      });
-      apply();
-      record(agent, "memory.tag", null, `${ids.length} as "${clean}"`);
       return ids.length;
     },
     remove: (ids, agent) => {
@@ -1585,7 +1548,6 @@ var openStore = (options) => {
           db.query(`UPDATE memories SET hits = hits + ?, source_count = source_count + ?,
                     last_read_at = max(last_read_at, ?) WHERE id = ?`).run(row2.hits, row2.source_count, row2.last_read_at, keepId);
           db.query("INSERT OR IGNORE INTO memory_readers (memory_id, agent_id) SELECT ?, agent_id FROM memory_readers WHERE memory_id = ?").run(keepId, id);
-          db.query("INSERT OR IGNORE INTO memory_tags (memory_id, tag) SELECT ?, tag FROM memory_tags WHERE memory_id = ?").run(keepId, id);
           softDelete(id, agent, `merged into ${keepId}`);
         }
       });
@@ -1630,17 +1592,13 @@ var openStore = (options) => {
         cluster: counts("SELECT cluster_id, count(*) AS n FROM memories WHERE deleted_at IS NULL GROUP BY cluster_id"),
         agent: counts(`SELECT r.agent_id, count(*) AS n FROM memory_readers r
              JOIN memories m ON m.id = r.memory_id AND m.deleted_at IS NULL GROUP BY r.agent_id`),
-        tag: counts(`SELECT t.tag, count(*) AS n FROM memory_tags t
-             JOIN memories m ON m.id = t.memory_id AND m.deleted_at IS NULL
-            GROUP BY t.tag ORDER BY n DESC LIMIT 40`),
         flags: db.query(`SELECT
                (SELECT count(*) FROM memories WHERE deleted_at IS NULL AND pinned = 1) AS pinned,
                (SELECT count(*) FROM memories WHERE deleted_at IS NULL AND archived = 1) AS archived,
                (SELECT count(*) FROM conflicts WHERE status = 'open') AS conflicted,
                (SELECT count(*) FROM memories WHERE deleted_at IS NULL AND reviewed_at IS NULL AND kind = 'claim') AS pending`).get()
       };
-    },
-    tags: () => db.query("SELECT DISTINCT tag FROM memory_tags ORDER BY tag").all().map((r) => r.tag)
+    }
   };
   const review = {
     pending: (limit = 50) => db.query(`${SELECT_MEMORY}
@@ -1866,7 +1824,6 @@ var openStore = (options) => {
         for (const chunkId of chunkIds)
           softDelete(chunkId, agent, `source ${id} dropped`);
         for (const claimId of claimIds) {
-          setTags(claimId, ["orphaned-source"]);
           db.query("UPDATE memories SET reviewed_at = NULL WHERE id = ?").run(claimId);
         }
         db.query("UPDATE sources SET dropped_at = ? WHERE id = ?").run(now(), id);
@@ -3549,7 +3506,7 @@ var createApi = (store) => {
     overlap: store.agents.overlap()
   }));
   api.get("/events", (c) => c.json(store.events(Number(c.req.query("limit") ?? 20))));
-  api.get("/facets", (c) => c.json({ ...store.memories.facets(), tags: store.memories.tags() }));
+  api.get("/facets", (c) => c.json(store.memories.facets()));
   api.get("/timeline", (c) => c.json(store.timeline(Number(c.req.query("buckets") ?? 60))));
   api.get("/search", (c) => {
     const q = c.req.query();
@@ -3582,8 +3539,7 @@ var createApi = (store) => {
     const patch = await c.req.json();
     const { body, code } = send(store.memories.update(c.req.param("id"), {
       ...patch.text !== undefined ? { text: patch.text } : {},
-      ...patch.cluster !== undefined ? { cluster: patch.cluster } : {},
-      ...patch.tags !== undefined ? { tags: patch.tags } : {}
+      ...patch.cluster !== undefined ? { cluster: patch.cluster } : {}
     }, patch.by ?? "human"));
     return c.json(body, code);
   });
@@ -3604,11 +3560,6 @@ var createApi = (store) => {
         return c.json({
           affected: store.memories.archive(ids, body.op === "archive", by)
         });
-      case "tag": {
-        if (!body.tag)
-          return c.json({ error: "tag is required" }, 400);
-        return c.json({ affected: store.memories.tag(ids, body.tag, by) });
-      }
       case "drop":
         return c.json({ affected: store.memories.remove(ids, by) });
       case "merge": {
@@ -3680,11 +3631,16 @@ var createApi = (store) => {
     return c.json(body, code);
   });
   api.get("/graph", (c) => {
+    const q = c.req.query();
     const found = store.memories.search({
-      query: c.req.query("q") ?? "",
-      limit: Number(c.req.query("limit") ?? 4000),
+      query: q["q"] ?? "",
+      limit: Number(q["limit"] ?? 4000),
       countRead: false,
-      ...c.req.query("chunks") === "1" ? {} : { kind: "claim" }
+      kind: q["kind"] ?? "claim",
+      ...q["archived"] === "1" ? { includeArchived: true } : {},
+      ...q["pending"] === "1" ? { pendingOnly: true } : {},
+      ...q["pinned"] === "1" ? { pinnedOnly: true } : {},
+      ...q["conflicted"] === "1" ? { conflictedOnly: true } : {}
     });
     if (found.isErr())
       return c.json({ error: explain(found.error) }, status(found.error));
@@ -3825,8 +3781,6 @@ var renderClaim = (m, now) => {
   write(`  ${bold(m.text)}`);
   if (m.provenance)
     write(`  ${dim(m.provenance)}`);
-  if (m.tags.length > 0)
-    write(`  ${dim(m.tags.map((t) => `#${t}`).join(" "))}`);
 };
 var renderConflict = (c, now) => {
   write();
@@ -3992,12 +3946,11 @@ ${dim("For you")}
   ${accent("stats")}                     what is in the store
   ${accent("export")} [query]            matching memories as JSONL
 
-${dim("Filters")}  ${dim("agent: cluster: tag: type: kind: strength:<40 asof: after: before:")}
+${dim("Filters")}  ${dim("agent: cluster: type: kind: strength:<40 asof: after: before:")}
 
 ${dim("Options")}
   --agent <id>       who is acting        ${dim('($LEDGER_AGENT, default "agent")')}
   --cluster <id>     cluster to write to
-  --tags a,b         tags for remember
   --json             machine-readable output
   --limit <n>        results              ${dim("(default 10 recall, 25 search)")}
   --db <path>        store location       ${dim("($LEDGER_DB)")}
@@ -4018,7 +3971,7 @@ var fail = (message) => {
 `);
   process.exit(1);
 };
-var agentLine = (m) => `${m.id}  ${String(Math.round(m.strength * 100)).padStart(3)}  ${m.text.replace(/\s+/g, " ").trim()}${dim(`  [${[m.clusterId, ...m.tags].join(", ")}]`)}`;
+var agentLine = (m) => `${m.id}  ${String(Math.round(m.strength * 100)).padStart(3)}  ${m.text.replace(/\s+/g, " ").trim()}${dim(`  [${m.clusterId}]`)}`;
 var run = async (argv) => {
   const { values, positionals } = parseArgs({
     args: [...argv],
@@ -4027,7 +3980,6 @@ var run = async (argv) => {
       db: { type: "string" },
       agent: { type: "string" },
       cluster: { type: "string" },
-      tags: { type: "string" },
       port: { type: "string" },
       host: { type: "string" },
       trust: { type: "string" },
@@ -4046,7 +3998,6 @@ var run = async (argv) => {
     db: values.db ?? storePath(),
     agent: values.agent ?? defaultAgent(),
     cluster: values.cluster,
-    tags: values.tags ? values.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
     port: values.port ? Number(values.port) : DEFAULT_PORT,
     host: values.host ?? "127.0.0.1",
     json: values.json ?? false,
@@ -4103,7 +4054,6 @@ var run = async (argv) => {
           text,
           cluster: options.cluster ?? "",
           agent: options.agent,
-          tags: options.tags,
           ...options.note ? { provenance: options.note } : {}
         });
         if (written.isErr())

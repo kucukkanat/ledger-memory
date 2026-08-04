@@ -1,5 +1,6 @@
+import type { Memory } from '@ledger/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { GraphResponse } from '../api.ts'
+import { api, type GraphResponse } from '../api.ts'
 import {
   type ColorMode,
   colorOf,
@@ -9,8 +10,19 @@ import {
   laneCentre,
   radiusOf,
 } from '../canvas/layouts.ts'
+import {
+  compose,
+  FITTED,
+  isFitted,
+  panBy,
+  type View,
+  wheelFactor,
+  zoomAbout,
+} from '../canvas/view.ts'
+import { type FilterControls, Filters } from '../components/Filters.tsx'
+import { Inspector } from '../components/Inspector.tsx'
 import { agentColor, ago, dateStr, fmtN, strengthColor } from '../format.ts'
-import { useSize } from '../hooks.ts'
+import { useLoad, useSize } from '../hooks.ts'
 
 /**
  * The canvas.
@@ -26,16 +38,21 @@ import { useSize } from '../hooks.ts'
 
 export type CanvasProps = {
   graph: GraphResponse
-  showChunks: boolean
-  onShowChunks: (next: boolean) => void
-  onOpenMemory: (id: string) => void
+  /** The same rail Browse shows — a drawing you cannot narrow is a poster. */
+  controls: FilterControls
+  reload: () => void
+  notify: (message: string, tone?: 'ok' | 'error') => void
+  onError: (error: unknown) => void
 }
 
 type Hover = { x: number; y: number; text: string; meta: string } | null
 
 const EASE = 0.16
 
-export const Canvas = ({ graph, showChunks, onShowChunks, onOpenMemory }: CanvasProps) => {
+/** Past this a press is a drag, not a click — below it, a shaky hand still selects. */
+const DRAG_SLOP = 4
+
+export const Canvas = ({ graph, controls, reload, notify, onError }: CanvasProps) => {
   const { ref: shell, size } = useSize<HTMLDivElement>()
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -50,6 +67,18 @@ export const Canvas = ({ graph, showChunks, onShowChunks, onOpenMemory }: Canvas
   const [hover, setHover] = useState<Hover>(null)
   const [playing, setPlaying] = useState(false)
   const [noteOpen, setNoteOpen] = useState(true)
+  /**
+   * The inspected node. Kept here rather than lifted to the app: clicking a dot
+   * has to open the panel *beside* the canvas, not navigate away from it — the
+   * whole point is to read a memory without losing the view you found it in.
+   */
+  const [focusId, setFocusId] = useState<string | null>(null)
+
+  const detail = useLoad(
+    () => (focusId ? api.memory(focusId) : Promise.resolve(null)),
+    [focusId],
+    onError,
+  )
 
   const clusterIds = useMemo(() => graph.clusters.map((c) => c.id), [graph.clusters])
 
@@ -95,8 +124,36 @@ export const Canvas = ({ graph, showChunks, onShowChunks, onOpenMemory }: Canvas
   const visibleIds = useMemo(() => new Set(visible.map((n) => n.id)), [visible])
   const maxHits = useMemo(() => Math.max(1, ...graph.nodes.map((n) => n.hits)), [graph.nodes])
 
-  /** World→screen transform, fitted to the current layout extent. */
+  /**
+   * World→screen transform: the auto-fit composed with the reader's zoom.
+   *
+   * A ref, not state, because the draw loop rewrites it every frame and hit
+   * testing reads it — re-rendering on either would cost a frame and buy
+   * nothing. `zoom` mirrors it into state purely so the readout can update.
+   */
   const view = useRef({ scale: 1, ox: 0, oy: 0 })
+  const user = useRef<View>(FITTED)
+  const [zoom, setZoom] = useState(1)
+  const [fitted, setFitted] = useState(true)
+  const [dragging, setDragging] = useState(false)
+  /** Where the current press started, and how far it has travelled since. */
+  const press = useRef<{ x: number; y: number; travel: number } | null>(null)
+
+  const applyView = useCallback((next: View) => {
+    user.current = next
+    setZoom(next.zoom)
+    setFitted(isFitted(next))
+  }, [])
+
+  const zoomBy = useCallback(
+    (factor: number, at?: { x: number; y: number }) => {
+      // Buttons have no cursor to zoom about, so they use the middle of the
+      // drawing area — the part not covered by the floating panels.
+      const centre = at ?? { x: size.width / 2, y: (size.height - 88) / 2 }
+      applyView(zoomAbout(user.current, factor, centre.x, centre.y))
+    },
+    [applyView, size],
+  )
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -153,27 +210,35 @@ export const Canvas = ({ graph, showChunks, onShowChunks, onOpenMemory }: Canvas
       // Space the floating panels occupy, reserved so nodes never slide under
       // them. Fit and centring must use the same numbers or content lands
       // outside the area the fit was computed for.
-      // The timeline gets a wider left gutter for its lane labels; the other
-      // layouts only need to clear the floating panels.
+      // The timeline gets a wider left gutter for its lane labels and heat a
+      // gutter for its axis captions; the others only need to clear the edge,
+      // now that the filters live in the rail beside the canvas rather than
+      // floating over it.
       const inset = {
         top: 44,
         right: 210,
-        bottom: 88,
-        left: layout === 'time' ? 330 : 210,
+        bottom: layout === 'heat' ? 108 : 88,
+        left: layout === 'time' ? 140 : layout === 'heat' ? 44 : 24,
       }
       const frameWidth = Math.max(80, size.width - inset.left - inset.right)
       const frameHeight = Math.max(80, size.height - inset.top - inset.bottom)
 
-      const scale = Math.min(
+      const fitScale = Math.min(
         frameWidth / Math.max(1, maxX - minX),
         frameHeight / Math.max(1, maxY - minY),
       )
-      view.current = {
-        scale,
-        ox: inset.left + frameWidth / 2 - ((minX + maxX) / 2) * scale,
-        oy: inset.top + frameHeight / 2 - ((minY + maxY) / 2) * scale,
-      }
-      const { ox, oy } = view.current
+      // The fit frames whatever survives the filters; the reader's zoom then
+      // applies on top of it, so filtering still reframes without throwing away
+      // where they had navigated to.
+      view.current = compose(
+        {
+          scale: fitScale,
+          ox: inset.left + frameWidth / 2 - ((minX + maxX) / 2) * fitScale,
+          oy: inset.top + frameHeight / 2 - ((minY + maxY) / 2) * fitScale,
+        },
+        user.current,
+      )
+      const { scale, ox, oy } = view.current
       const toScreen = (p: { x: number; y: number }) => ({
         x: p.x * scale + ox,
         y: p.y * scale + oy,
@@ -217,6 +282,15 @@ export const Canvas = ({ graph, showChunks, onShowChunks, onOpenMemory }: Canvas
         }
         if (node.conflict) {
           context.strokeStyle = '#f2913f'
+          context.lineWidth = 1.4
+          context.stroke()
+        }
+        // Drawn as a detached halo rather than a thicker outline: the pinned and
+        // conflict rings already own the node's own edge.
+        if (node.id === focusId) {
+          context.beginPath()
+          context.arc(x, y, r + 4, 0, Math.PI * 2)
+          context.strokeStyle = '#e7e9eb'
           context.lineWidth = 1.4
           context.stroke()
         }
@@ -320,6 +394,7 @@ export const Canvas = ({ graph, showChunks, onShowChunks, onOpenMemory }: Canvas
     showLinks,
     showLabels,
     maxHits,
+    focusId,
   ])
 
   /** Play sweeps the as-of scrubber, replaying how the store filled up. */
@@ -337,13 +412,10 @@ export const Canvas = ({ graph, showChunks, onShowChunks, onOpenMemory }: Canvas
     return () => clearInterval(timer)
   }, [playing])
 
-  const onMove = useCallback(
-    (event: React.MouseEvent<HTMLCanvasElement>) => {
-      const rect = event.currentTarget.getBoundingClientRect()
-      const px = event.clientX - rect.left
-      const py = event.clientY - rect.top
+  /** The node under a screen point, if any — hover and selection ask the same question. */
+  const nodeAt = useCallback(
+    (px: number, py: number) => {
       const { scale, ox, oy } = view.current
-
       let best: { node: (typeof visible)[number]; distance: number } | null = null
       for (const node of visible) {
         const position = live.current.get(node.id)
@@ -351,39 +423,101 @@ export const Canvas = ({ graph, showChunks, onShowChunks, onOpenMemory }: Canvas
         const distance = Math.hypot(position.x * scale + ox - px, position.y * scale + oy - py)
         if (distance < 9 && (!best || distance < best.distance)) best = { node, distance }
       }
+      return best?.node ?? null
+    },
+    [visible],
+  )
 
+  /**
+   * The wheel is bound natively rather than through React.
+   *
+   * React attaches `wheel` at the root as a passive listener, where
+   * `preventDefault` is ignored — zooming would scroll the page underneath at
+   * the same time. A non-passive listener on the canvas itself is the only way
+   * to claim the gesture.
+   */
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const onWheel = (event: WheelEvent): void => {
+      event.preventDefault()
+      const rect = canvas.getBoundingClientRect()
+      applyView(
+        zoomAbout(
+          user.current,
+          wheelFactor(event),
+          event.clientX - rect.left,
+          event.clientY - rect.top,
+        ),
+      )
+    }
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', onWheel)
+  }, [applyView])
+
+  const onPointerDown = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
+    // Captured so a drag that leaves the canvas — or the window — still ends
+    // here, rather than leaving the view stuck to the cursor.
+    event.currentTarget.setPointerCapture(event.pointerId)
+    press.current = { x: event.clientX, y: event.clientY, travel: 0 }
+    setHover(null)
+  }, [])
+
+  const onPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLCanvasElement>) => {
+      const rect = event.currentTarget.getBoundingClientRect()
+      const px = event.clientX - rect.left
+      const py = event.clientY - rect.top
+
+      const start = press.current
+      if (start) {
+        const dx = event.clientX - start.x
+        const dy = event.clientY - start.y
+        press.current = {
+          x: event.clientX,
+          y: event.clientY,
+          travel: start.travel + Math.abs(dx) + Math.abs(dy),
+        }
+        if (press.current.travel > DRAG_SLOP) {
+          user.current = panBy(user.current, dx, dy)
+          // Panning never re-renders for its own sake — the loop reads the ref.
+          // These two only flip once per drag; React bails on the rest.
+          setDragging(true)
+          setFitted(false)
+        }
+        return
+      }
+
+      const node = nodeAt(px, py)
       setHover(
-        best
+        node
           ? {
               x: Math.min(px + 14, size.width - 330),
               y: Math.min(py + 14, size.height - 110),
-              text: best.node.text,
-              meta: `${best.node.cluster} · ${best.node.writer} · str ${Math.round(
-                best.node.strength * 100,
-              )} · ${fmtN(best.node.hits)} reads · ${ago(best.node.createdAt)} old`,
+              text: node.text,
+              meta: `${node.cluster} · ${node.writer} · str ${Math.round(
+                node.strength * 100,
+              )} · ${fmtN(node.hits)} reads · ${ago(node.createdAt)} old`,
             }
           : null,
       )
     },
-    [visible, size],
+    [nodeAt, size],
   )
 
-  const onClick = useCallback(
-    (event: React.MouseEvent<HTMLCanvasElement>) => {
+  const onPointerUp = useCallback(
+    (event: React.PointerEvent<HTMLCanvasElement>) => {
+      const start = press.current
+      press.current = null
+      setDragging(false)
+      if (!start || start.travel > DRAG_SLOP) return
+
       const rect = event.currentTarget.getBoundingClientRect()
-      const px = event.clientX - rect.left
-      const py = event.clientY - rect.top
-      const { scale, ox, oy } = view.current
-      for (const node of visible) {
-        const position = live.current.get(node.id)
-        if (!position) continue
-        if (Math.hypot(position.x * scale + ox - px, position.y * scale + oy - py) < 9) {
-          onOpenMemory(node.id)
-          return
-        }
-      }
+      const node = nodeAt(event.clientX - rect.left, event.clientY - rect.top)
+      // Releasing on the background dismisses the panel, the same gesture as ✕.
+      setFocusId(node?.id ?? null)
     },
-    [visible, onOpenMemory],
+    [nodeAt],
   )
 
   const legend = useMemo(() => {
@@ -454,304 +588,361 @@ export const Canvas = ({ graph, showChunks, onShowChunks, onOpenMemory }: Canvas
   }, [graph.nodes, span, until])
 
   return (
-    <div className="canvas" ref={shell}>
-      <canvas
-        ref={canvasRef}
-        onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
-        onClick={onClick}
+    <div className="screen" style={{ flexDirection: 'row' }}>
+      <Filters
+        controls={controls}
+        onReset={() => {
+          setMinStrength(0)
+          setMinHits(0)
+          setHiddenClusters(new Set())
+          setUntil(100)
+          applyView(FITTED)
+        }}
+        extra={
+          <>
+            <div className="facets__group eyebrow">IN THIS VIEW</div>
+            <div style={{ padding: '0 12px 4px' }}>
+              <div className="eyebrow">
+                STRENGTH ≥ <span className="accent">{minStrength}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={95}
+                step={5}
+                value={minStrength}
+                onChange={(e) => setMinStrength(Number(e.target.value))}
+                style={{ width: '100%', height: 14 }}
+              />
+              <div className="eyebrow">
+                MIN READS <span className="accent">{minHits}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={120}
+                step={4}
+                value={minHits}
+                onChange={(e) => setMinHits(Number(e.target.value))}
+                style={{ width: '100%', height: 14 }}
+              />
+            </div>
+          </>
+        }
       />
 
-      <div className="canvas__segments" style={{ top: 12, left: 12 }}>
-        {(['clusters', 'graph', 'time', 'heat'] as const).map((option) => (
-          <button
-            type="button"
-            key={option}
-            className={`canvas__segment${layout === option ? ' canvas__segment--on' : ''}`}
-            title={LAYOUT_NOTES[option]}
-            onClick={() => setLayout(option)}
-          >
-            {option === 'time' ? 'TIMELINE' : option.toUpperCase()}
-          </button>
-        ))}
-      </div>
+      <div className="canvas" ref={shell}>
+        <canvas
+          ref={canvasRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onPointerLeave={() => setHover(null)}
+          onDoubleClick={() => applyView(FITTED)}
+          style={{ cursor: dragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+        />
 
-      <div
-        style={{
-          position: 'absolute',
-          top: 12,
-          right: 12,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
-          alignItems: 'flex-end',
-        }}
-      >
-        <div className="canvas__segments" style={{ position: 'relative', top: 0, right: 0 }}>
-          <span
-            className="canvas__segment"
-            style={{ color: 'var(--lg-text-ghost)', cursor: 'default' }}
-          >
-            COLOR
-          </span>
-          {(
-            [
-              ['cluster', 'TOPIC'],
-              ['agent', 'AGENT'],
-              ['strength', 'STRENGTH'],
-              ['heat', 'HEAT'],
-            ] as const
-          ).map(([mode, label]) => (
+        <div className="canvas__segments" style={{ top: 12, left: 12 }}>
+          {(['clusters', 'graph', 'time', 'heat'] as const).map((option) => (
             <button
               type="button"
-              key={mode}
-              className={`canvas__segment${color === mode ? ' canvas__segment--toggle-on' : ''}`}
-              onClick={() => setColor(mode)}
+              key={option}
+              className={`canvas__segment${layout === option ? ' canvas__segment--on' : ''}`}
+              title={LAYOUT_NOTES[option]}
+              onClick={() => setLayout(option)}
             >
-              {label}
+              {option === 'time' ? 'TIMELINE' : option.toUpperCase()}
             </button>
           ))}
         </div>
 
-        <div className="canvas__segments" style={{ position: 'relative', top: 0, right: 0 }}>
-          {(
-            [
-              ['CHUNKS', showChunks, () => onShowChunks(!showChunks)],
-              ['LINKS', showLinks, () => setShowLinks((v) => !v)],
-              ['LABELS', showLabels, () => setShowLabels((v) => !v)],
-            ] as const
-          ).map(([label, on, toggle]) => (
-            <button
-              type="button"
-              key={label}
-              className={`canvas__segment${on ? ' canvas__segment--toggle-on' : ''}`}
-              onClick={toggle}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div
-        className="canvas__float"
-        style={{
-          top: 52,
-          left: 12,
-          width: 196,
-          maxHeight: 'calc(100% - 160px)',
-          overflowY: 'auto',
-        }}
-      >
         <div
           style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '9px 11px 6px',
-            borderBottom: '1px solid var(--lg-border-subtle)',
+            flexDirection: 'column',
+            gap: 8,
+            alignItems: 'flex-end',
           }}
         >
-          <span className="eyebrow">VIEW FILTERS</span>
-          <button
-            type="button"
-            className="selbar__link"
-            style={{ fontSize: 9 }}
-            onClick={() => {
-              setMinStrength(0)
-              setMinHits(0)
-              setHiddenClusters(new Set())
-              setUntil(100)
-            }}
-          >
-            RESET
-          </button>
-        </div>
-        <div style={{ padding: '9px 11px 3px' }}>
-          <div className="eyebrow">
-            STRENGTH ≥ <span className="accent">{minStrength}</span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={95}
-            step={5}
-            value={minStrength}
-            onChange={(e) => setMinStrength(Number(e.target.value))}
-            style={{ width: '100%', height: 14 }}
-          />
-          <div className="eyebrow">
-            MIN READS <span className="accent">{minHits}</span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={120}
-            step={4}
-            value={minHits}
-            onChange={(e) => setMinHits(Number(e.target.value))}
-            style={{ width: '100%', height: 14 }}
-          />
-        </div>
-      </div>
-
-      <div
-        className="canvas__float"
-        style={{ right: 12, bottom: 88, padding: '9px 11px', maxWidth: 200 }}
-      >
-        <div className="eyebrow" style={{ marginBottom: 6 }}>
-          {color === 'cluster'
-            ? 'TOPIC'
-            : color === 'agent'
-              ? 'AGENT'
-              : color === 'strength'
-                ? 'STRENGTH'
-                : 'RETRIEVAL'}
-        </div>
-        {legend.map((item) => (
-          <button
-            type="button"
-            key={item.key}
-            className="canvas__legend-item"
-            onClick={() => {
-              if (!item.toggleable) return
-              setHiddenClusters((current) => {
-                const next = new Set(current)
-                if (next.has(item.key)) next.delete(item.key)
-                else next.add(item.key)
-                return next
-              })
-            }}
-            style={{ opacity: hiddenClusters.has(item.key) ? 0.35 : 1 }}
-          >
-            <span className="dot" style={{ width: 7, height: 7, background: item.tint }} />
+          <div className="canvas__segments" style={{ position: 'relative', top: 0, right: 0 }}>
             <span
-              style={{
-                flex: 1,
-                fontSize: 10.5,
-                color: 'var(--lg-text-dim)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
+              className="canvas__segment"
+              style={{ color: 'var(--lg-text-ghost)', cursor: 'default' }}
             >
-              {item.label}
+              COLOR
             </span>
-            <span className="mono" style={{ fontSize: 9, color: 'var(--lg-text-trace)' }}>
-              {fmtN(item.n)}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {noteOpen && (
-        <div
-          className="canvas__float"
-          style={{ left: 220, bottom: 88, maxWidth: 380, padding: '8px 10px' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-            <div className="mono muted" style={{ flex: 1, fontSize: 10.5, lineHeight: 1.5 }}>
-              {LAYOUT_NOTES[layout]}
-            </div>
-            <button
-              type="button"
-              className="selbar__link"
-              style={{ textDecoration: 'none' }}
-              onClick={() => setNoteOpen(false)}
-              title="dismiss"
-            >
-              ✕
-            </button>
-          </div>
-          <div
-            className="mono"
-            style={{
-              fontSize: 9.5,
-              lineHeight: 1.5,
-              color: 'var(--lg-text-trace)',
-              marginTop: 5,
-            }}
-          >
-            Ringed in lime = pinned · ringed in amber = in conflict · faded = document chunk
-          </div>
-        </div>
-      )}
-      {!noteOpen && (
-        <button
-          type="button"
-          className="canvas__float"
-          onClick={() => setNoteOpen(true)}
-          title="what am I looking at?"
-          style={{
-            left: 220,
-            bottom: 88,
-            width: 22,
-            height: 22,
-            color: 'var(--lg-text-faint)',
-            cursor: 'pointer',
-          }}
-        >
-          ?
-        </button>
-      )}
-
-      {hover && (
-        <div className="canvas__tooltip" style={{ left: hover.x, top: hover.y }}>
-          <div style={{ fontSize: 12, lineHeight: 1.35, marginBottom: 5 }}>{hover.text}</div>
-          <div className="mono dim" style={{ fontSize: 9.5, letterSpacing: '0.04em' }}>
-            {hover.meta}
-          </div>
-        </div>
-      )}
-
-      <div className="canvas__float canvas__scrubber">
-        <button
-          type="button"
-          className="btn"
-          onClick={() => setPlaying((p) => !p)}
-          style={{
-            width: 26,
-            height: 26,
-            justifyContent: 'center',
-            padding: 0,
-          }}
-          title="replay how the store filled up"
-        >
-          {playing ? '❚❚' : '▶'}
-        </button>
-        <div style={{ flex: 'none', width: 150 }} className="mono">
-          <div className="eyebrow">KNOWLEDGE AS OF</div>
-          <div style={{ fontSize: 13, letterSpacing: '-0.01em' }}>{dateStr(untilTime)}</div>
-        </div>
-        <div className="canvas__histogram">
-          <div className="canvas__bars">
-            {histogram.map((bar, i) => (
-              <span
-                // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length histogram, index is the identity
-                key={i}
-                style={{
-                  height: bar.height,
-                  background: bar.past ? 'var(--lg-accent-dim)' : '#181c1f',
-                }}
-              />
+            {(
+              [
+                ['cluster', 'TOPIC'],
+                ['agent', 'AGENT'],
+                ['strength', 'STRENGTH'],
+                ['heat', 'HEAT'],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                type="button"
+                key={mode}
+                className={`canvas__segment${color === mode ? ' canvas__segment--toggle-on' : ''}`}
+                onClick={() => setColor(mode)}
+              >
+                {label}
+              </button>
             ))}
           </div>
-          <input
-            type="range"
-            className="canvas__range"
-            min={2}
-            max={100}
-            value={until}
-            onChange={(e) => setUntil(Number(e.target.value))}
-          />
+
+          <div className="canvas__segments" style={{ position: 'relative', top: 0, right: 0 }}>
+            {(
+              [
+                ['LINKS', showLinks, () => setShowLinks((v) => !v)],
+                ['LABELS', showLabels, () => setShowLabels((v) => !v)],
+              ] as const
+            ).map(([label, on, toggle]) => (
+              <button
+                type="button"
+                key={label}
+                className={`canvas__segment${on ? ' canvas__segment--toggle-on' : ''}`}
+                onClick={toggle}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="canvas__segments" style={{ position: 'relative', top: 0, right: 0 }}>
+            <button
+              type="button"
+              className="canvas__segment"
+              onClick={() => zoomBy(1 / 1.4)}
+              title="zoom out"
+            >
+              −
+            </button>
+            <span
+              className="canvas__segment"
+              style={{ cursor: 'default', minWidth: 52, textAlign: 'center' }}
+              title="scroll to zoom · drag to pan · double-click to fit"
+            >
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              className="canvas__segment"
+              onClick={() => zoomBy(1.4)}
+              title="zoom in"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              className={`canvas__segment${fitted ? '' : ' canvas__segment--toggle-on'}`}
+              onClick={() => applyView(FITTED)}
+              title="frame everything in view"
+            >
+              FIT
+            </button>
+          </div>
         </div>
-        <div className="mono" style={{ flex: 'none', textAlign: 'right', width: 110 }}>
-          <div className="eyebrow">IN VIEW</div>
-          <div className="accent" style={{ fontSize: 13 }}>
-            {fmtN(visible.length)}
+
+        <div
+          className="canvas__float"
+          style={{ right: 12, bottom: 88, padding: '9px 11px', maxWidth: 200 }}
+        >
+          <div className="eyebrow" style={{ marginBottom: 6 }}>
+            {color === 'cluster'
+              ? 'TOPIC'
+              : color === 'agent'
+                ? 'AGENT'
+                : color === 'strength'
+                  ? 'STRENGTH'
+                  : 'RETRIEVAL'}
+          </div>
+          {legend.map((item) => (
+            <button
+              type="button"
+              key={item.key}
+              className="canvas__legend-item"
+              onClick={() => {
+                if (!item.toggleable) return
+                setHiddenClusters((current) => {
+                  const next = new Set(current)
+                  if (next.has(item.key)) next.delete(item.key)
+                  else next.add(item.key)
+                  return next
+                })
+              }}
+              style={{ opacity: hiddenClusters.has(item.key) ? 0.35 : 1 }}
+            >
+              <span className="dot" style={{ width: 7, height: 7, background: item.tint }} />
+              <span
+                style={{
+                  flex: 1,
+                  fontSize: 10.5,
+                  color: 'var(--lg-text-dim)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {item.label}
+              </span>
+              <span className="mono" style={{ fontSize: 9, color: 'var(--lg-text-trace)' }}>
+                {fmtN(item.n)}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {noteOpen && (
+          <div
+            className="canvas__float"
+            // Heat draws a caption under its x axis; the note sits above it.
+            style={{
+              left: 12,
+              bottom: layout === 'heat' ? 108 : 88,
+              maxWidth: 380,
+              padding: '8px 10px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+              <div className="mono muted" style={{ flex: 1, fontSize: 10.5, lineHeight: 1.5 }}>
+                {LAYOUT_NOTES[layout]}
+              </div>
+              <button
+                type="button"
+                className="selbar__link"
+                style={{ textDecoration: 'none' }}
+                onClick={() => setNoteOpen(false)}
+                title="dismiss"
+              >
+                ✕
+              </button>
+            </div>
+            <div
+              className="mono"
+              style={{
+                fontSize: 9.5,
+                lineHeight: 1.5,
+                color: 'var(--lg-text-trace)',
+                marginTop: 5,
+              }}
+            >
+              Ringed in lime = pinned · ringed in amber = in conflict · faded = document chunk
+            </div>
+          </div>
+        )}
+        {!noteOpen && (
+          <button
+            type="button"
+            className="canvas__float"
+            onClick={() => setNoteOpen(true)}
+            title="what am I looking at?"
+            style={{
+              left: 12,
+              bottom: layout === 'heat' ? 108 : 88,
+              width: 22,
+              height: 22,
+              color: 'var(--lg-text-faint)',
+              cursor: 'pointer',
+            }}
+          >
+            ?
+          </button>
+        )}
+
+        {hover && (
+          <div className="canvas__tooltip" style={{ left: hover.x, top: hover.y }}>
+            <div style={{ fontSize: 12, lineHeight: 1.35, marginBottom: 5 }}>{hover.text}</div>
+            <div className="mono dim" style={{ fontSize: 9.5, letterSpacing: '0.04em' }}>
+              {hover.meta}
+            </div>
+          </div>
+        )}
+
+        <div className="canvas__float canvas__scrubber">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setPlaying((p) => !p)}
+            style={{
+              width: 26,
+              height: 26,
+              justifyContent: 'center',
+              padding: 0,
+            }}
+            title="replay how the store filled up"
+          >
+            {playing ? '❚❚' : '▶'}
+          </button>
+          <div style={{ flex: 'none', width: 150 }} className="mono">
+            <div className="eyebrow">KNOWLEDGE AS OF</div>
+            <div style={{ fontSize: 13, letterSpacing: '-0.01em' }}>{dateStr(untilTime)}</div>
+          </div>
+          <div className="canvas__histogram">
+            <div className="canvas__bars">
+              {histogram.map((bar, i) => (
+                <span
+                  // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length histogram, index is the identity
+                  key={i}
+                  style={{
+                    height: bar.height,
+                    background: bar.past ? 'var(--lg-accent-dim)' : '#181c1f',
+                  }}
+                />
+              ))}
+            </div>
+            <input
+              type="range"
+              className="canvas__range"
+              min={2}
+              max={100}
+              value={until}
+              onChange={(e) => setUntil(Number(e.target.value))}
+            />
+          </div>
+          <div className="mono" style={{ flex: 'none', textAlign: 'right', width: 110 }}>
+            <div className="eyebrow">IN VIEW</div>
+            <div className="accent" style={{ fontSize: 13 }}>
+              {fmtN(visible.length)}
+            </div>
           </div>
         </div>
       </div>
+
+      {detail.data && (
+        <Inspector
+          memory={detail.data.memory}
+          related={detail.data.related}
+          onClose={() => setFocusId(null)}
+          onPin={() => {
+            const memory: Memory = detail.data?.memory as Memory
+            void api
+              .bulk(memory.pinned ? 'unpin' : 'pin', [memory.id])
+              .then(() => {
+                notify(memory.pinned ? 'unpinned' : 'pinned — protected from decay')
+                detail.reload()
+                reload()
+              })
+              .catch(onError)
+          }}
+          onDrop={() => {
+            const id = detail.data?.memory.id
+            if (!id) return
+            void api
+              .bulk('drop', [id])
+              .then(() => {
+                notify('dropped — still answerable by asof:')
+                setFocusId(null)
+                reload()
+              })
+              .catch(onError)
+          }}
+          onOpen={setFocusId}
+        />
+      )}
     </div>
   )
 }

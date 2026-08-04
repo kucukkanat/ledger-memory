@@ -75,12 +75,10 @@ export declare const createServer: (options: ServerOptions) => {
             update: (id: string, patch: {
                 text?: string;
                 cluster?: string;
-                tags?: readonly string[];
                 provenance?: string;
             }, agent: string) => import("neverthrow").Result<import("@ledger/core").Memory, import("@ledger/core").LedgerFailure>;
             pin: (ids: readonly string[], pinned: boolean, agent: string) => number;
             archive: (ids: readonly string[], archived: boolean, agent: string) => number;
-            tag: (ids: readonly string[], tag: string, agent: string) => number;
             remove: (ids: readonly string[], agent: string) => number;
             merge: (ids: readonly string[], agent: string) => import("neverthrow").Result<import("@ledger/core").Memory, import("@ledger/core").LedgerFailure>;
             link: (a: string, b: string, agent: string) => import("neverthrow").Result<void, import("@ledger/core").LedgerFailure>;
@@ -99,10 +97,6 @@ export declare const createServer: (options: ServerOptions) => {
                     agent_id: string;
                     n: number;
                 }[];
-                tag: {
-                    tag: string;
-                    n: number;
-                }[];
                 flags: {
                     pinned: number;
                     archived: number;
@@ -110,7 +104,6 @@ export declare const createServer: (options: ServerOptions) => {
                     pending: number;
                 };
             };
-            tags: () => string[];
         };
         review: {
             pending: (limit?: number) => import("@ledger/core").Memory[];

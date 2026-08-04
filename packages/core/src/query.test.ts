@@ -29,10 +29,9 @@ describe('free text', () => {
 
 describe('filters', () => {
   test('extracts each supported key', () => {
-    const q = ok('agent:wren cluster:code tag:build type:doc kind:claim')
+    const q = ok('agent:wren cluster:code type:doc kind:claim')
     expect(q.agent).toEqual(['wren'])
     expect(q.cluster).toEqual(['code'])
-    expect(q.tag).toEqual(['build'])
     expect(q.type).toEqual(['doc'])
     expect(q.kind).toEqual(['claim'])
     expect(q.terms).toEqual([])

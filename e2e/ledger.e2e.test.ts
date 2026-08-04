@@ -112,8 +112,6 @@ describe('an agent lives its whole life through the CLI', () => {
       'opal requires Node 22 — 20 breaks the wasm loader',
       '--cluster',
       'code',
-      '--tags',
-      'opal,build',
       '--note',
       'confirmed by follow-up question',
     ])
@@ -136,8 +134,7 @@ describe('an agent lives its whole life through the CLI', () => {
     const { out } = await ledger(['recall', 'node wasm loader'])
     expect(out).toContain('opal requires Node 22')
     expect(out).toMatch(/m_\w+\s+\d+\s+opal requires/)
-    // Tags come back in storage order, not the order they were passed.
-    expect(out).toMatch(/\[code, (build, opal|opal, build)\]/)
+    expect(out).toContain('[code]')
   })
 
   test('recall counts as a retrieval and strengthens the memory', async () => {

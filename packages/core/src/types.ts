@@ -86,7 +86,6 @@ export type Memory = {
   readonly writer: string
   /** Every agent that has written or read it — drives corroboration. */
   readonly readers: readonly string[]
-  readonly tags: readonly string[]
   readonly sourceId: string | null
   readonly chunkIndex: number | null
   readonly provenance: string
